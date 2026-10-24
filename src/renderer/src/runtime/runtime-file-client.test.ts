@@ -3,6 +3,7 @@ import { readRuntimeDirectory } from './runtime-file-mutation-client'
 import { readRuntimeFileContent, readRuntimeFilePreview } from './runtime-file-read-client'
 import {
   fsReadFile,
+  fsReadRuntimeMediaPreview,
   runtimeEnvironmentCall,
   installRuntimeFileClientEnvironment
 } from './runtime-file-client-test-harness'
@@ -344,5 +345,135 @@ describe('runtime file client', () => {
     ).rejects.toThrow('outside the owning runtime worktree')
 
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+  })
+
+  describe('remote media', () => {
+    const env = { kind: 'environment' as const, environmentId: 'env-1' }
+    const media = {
+      content: '',
+      isBinary: true as const,
+      mimeType: 'video/mp4',
+      mediaUrl: 'orca-media://file/t'
+    }
+
+    it('asks main for a media URL for a remote video', async () => {
+      fsReadRuntimeMediaPreview.mockResolvedValue(media)
+
+      await expect(
+        readRuntimeFileContent({
+          target: env,
+          filePath: '/remote/repo/out/clip.mp4',
+          relativePath: 'out/clip.mp4',
+          worktreeId: 'wt-1'
+        })
+      ).resolves.toEqual(media)
+
+      expect(fsReadRuntimeMediaPreview).toHaveBeenCalledWith({
+        environmentId: 'env-1',
+        worktree: 'id:wt-1',
+        relativePath: 'out/clip.mp4',
+        expectedEnvironmentPairingRevision: undefined
+      })
+      expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+    })
+
+    it('treats an upper-case extension as media', async () => {
+      fsReadRuntimeMediaPreview.mockResolvedValue(media)
+
+      await readRuntimeFileContent({
+        target: env,
+        filePath: '/remote/repo/out/CLIP.MP4',
+        relativePath: 'out/CLIP.MP4',
+        worktreeId: 'wt-1'
+      })
+
+      expect(fsReadRuntimeMediaPreview).toHaveBeenCalledOnce()
+    })
+
+    it('leaves non-media remote files on files.read', async () => {
+      runtimeEnvironmentCall.mockResolvedValue({
+        id: 'rpc-1',
+        ok: true,
+        result: {
+          worktree: 'id:wt-1',
+          relativePath: 'readme.md',
+          content: 'hi',
+          truncated: false,
+          byteLength: 2
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      })
+
+      await readRuntimeFileContent({
+        target: env,
+        filePath: '/remote/repo/readme.md',
+        relativePath: 'readme.md',
+        worktreeId: 'wt-1'
+      })
+
+      expect(fsReadRuntimeMediaPreview).not.toHaveBeenCalled()
+      expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'files.read' })
+      )
+    })
+
+    it('plays a chat scratch video', async () => {
+      fsReadRuntimeMediaPreview.mockResolvedValue(media)
+      const root = `/state/chat-scratch/${'a'.repeat(32)}`
+
+      await readRuntimeFileContent({
+        target: env,
+        filePath: `${root}/demo.mp4`,
+        relativePath: `${root}/demo.mp4`,
+        worktreeId: 'wt-1'
+      })
+
+      expect(fsReadRuntimeMediaPreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          environmentId: 'env-1',
+          worktree: `path:${root}`,
+          relativePath: 'demo.mp4'
+        })
+      )
+    })
+
+    it('leaves terminal artifact reads unchanged', async () => {
+      runtimeEnvironmentCall.mockResolvedValue({
+        id: 'rpc-1',
+        ok: true,
+        result: {
+          worktree: 'wt-1',
+          relativePath: '/tmp/a.mp4',
+          content: 'x',
+          truncated: false,
+          byteLength: 1
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      })
+
+      await readRuntimeFileContent({
+        target: env,
+        filePath: '/tmp/a.mp4',
+        relativePath: '/tmp/a.mp4',
+        worktreeId: 'wt-1',
+        terminalArtifactGrantId: 'g-1'
+      })
+
+      expect(fsReadRuntimeMediaPreview).not.toHaveBeenCalled()
+    })
+
+    it('leaves local targets unchanged', async () => {
+      fsReadFile.mockResolvedValue({ content: '', isBinary: true })
+
+      await readRuntimeFileContent({
+        target: { kind: 'local' as const },
+        filePath: '/repo/clip.mp4',
+        relativePath: 'clip.mp4',
+        worktreeId: 'wt-1'
+      })
+
+      expect(fsReadFile).toHaveBeenCalled()
+      expect(fsReadRuntimeMediaPreview).not.toHaveBeenCalled()
+    })
   })
 })
