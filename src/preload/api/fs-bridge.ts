@@ -6,6 +6,7 @@ import type {
 } from '../../shared/native-file-drop-preparation'
 import type { SshMutationExpectation } from '../../shared/ssh-types'
 import type { LocalFileAccess } from '../../shared/local-file-access'
+import type { RemoteMediaAddress } from '../../shared/media-file-extensions'
 import type {
   FileWriteDiskPrecondition,
   FileWriteResult
@@ -59,9 +60,14 @@ export const fsApi = {
     content: string
     isBinary: boolean
     isImage?: boolean
+    mediaUrl?: string
     mimeType?: string
     fileIdentity?: string
   }> => ipcRenderer.invoke('fs:readFile', args),
+  readRuntimeMediaPreview: (
+    args: RemoteMediaAddress
+  ): Promise<{ content: string; isBinary: true; mimeType: string; mediaUrl: string } | null> =>
+    ipcRenderer.invoke('fs:readRuntimeMediaPreview', args),
   readLocalLogTail: (args: LocalLogTailReadArgs): Promise<LocalLogTailReadResult> =>
     ipcRenderer.invoke('fs:readLocalLogTail', args),
   startLocalLogTail: (args: LocalLogTailWatchArgs): Promise<void> =>

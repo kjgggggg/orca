@@ -26,6 +26,7 @@ import { registerFilesystemChunkReadHandler } from './filesystem-chunk-read-hand
 import { readMediaPreview } from '../../media/media-preview-protocol'
 import { windowsFsPath } from '../../wsl/wsl-unc-drive-fs-path'
 import { assertWslUncPathRunning, guardWslUncPathAccess } from '../../wsl/wsl-unc-access-gate'
+import type { RemoteMediaAddress } from '../../../shared/media-file-extensions'
 import {
   readLocalFileContent,
   readLocalLogSnapshot,
@@ -116,6 +117,26 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         },
         { wake: args.wakeWslDistro === true }
       )
+    }
+  )
+
+  ipcMain.handle(
+    'fs:readRuntimeMediaPreview',
+    (event, args: RemoteMediaAddress): ReturnType<typeof readMediaPreview> => {
+      const { environmentId, worktree, relativePath } = args
+      if (
+        typeof environmentId !== 'string' ||
+        !environmentId ||
+        typeof worktree !== 'string' ||
+        !worktree ||
+        typeof relativePath !== 'string' ||
+        !relativePath ||
+        /^([/\\]|[A-Za-z]:[/\\])/.test(relativePath) ||
+        relativePath.includes('\0')
+      ) {
+        throw new Error('Invalid media path')
+      }
+      return readMediaPreview(event, { remote: args }, store)
     }
   )
 

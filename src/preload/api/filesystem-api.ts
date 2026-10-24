@@ -19,6 +19,7 @@ import type {
 } from '../../shared/local-log-tail-types'
 import type { SshMutationExpectation } from '../../shared/ssh-types'
 import type { LocalFileAccess } from '../../shared/local-file-access'
+import type { RemoteMediaAddress } from '../../shared/media-file-extensions'
 import type {
   FileWriteDiskPrecondition,
   FileWriteResult
@@ -83,6 +84,9 @@ export type FilesystemApi = {
       mimeType?: string
       fileIdentity?: string
     }>
+    readRuntimeMediaPreview: (
+      args: RemoteMediaAddress
+    ) => Promise<{ content: string; isBinary: true; mimeType: string; mediaUrl: string } | null>
     readLocalLogTail: (args: LocalLogTailReadArgs) => Promise<LocalLogTailReadResult>
     startLocalLogTail: (args: LocalLogTailWatchArgs) => Promise<void>
     stopLocalLogTail: (args: { subscriptionId: string }) => Promise<void>

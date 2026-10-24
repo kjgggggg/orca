@@ -1,15 +1,21 @@
 import { randomUUID } from 'node:crypto'
-import { extname } from 'node:path'
 import { protocol, type WebContents } from 'electron'
 import type { Store } from '../persistence'
 import type { LocalFileAccess } from '../../shared/local-file-access'
-import { MEDIA_FILE_MIME_TYPES, MEDIA_PREVIEW_SCHEME } from '../../shared/media-file-extensions'
+import {
+  MEDIA_PREVIEW_SCHEME,
+  mediaFileMimeType,
+  type RemoteMediaAddress
+} from '../../shared/media-file-extensions'
 import { resolveLocalFileRequestPath } from '../ipc/local-file-access-resolution'
 import { openLocalRegularFile } from '../ipc/filesystem/local-regular-file-read'
 import { abortWhenRendererGone } from '../ipc/renderer-lifetime-abort'
 import { createMediaRangeResponse } from './media-range-response'
+import { readRemoteMediaChunk, statRemoteMedia } from './media-preview-remote-reader'
 
-type MediaTarget = { filePath: string; connectionId?: string; access?: LocalFileAccess }
+type MediaTarget =
+  | { filePath: string; connectionId?: string; access?: LocalFileAccess }
+  | { remote: RemoteMediaAddress }
 type MediaGrant = { target: MediaTarget; store: Store; mimeType: string }
 const grants = new Map<string, MediaGrant>()
 const senders = new Map<number, Map<string, string>>()
@@ -24,7 +30,9 @@ export function readMediaPreview(
   target: MediaTarget,
   store: Store
 ): { content: string; isBinary: boolean; mimeType: string; mediaUrl: string } | null {
-  const mimeType = MEDIA_FILE_MIME_TYPES[extname(target.filePath).toLowerCase()]
+  const mimeType = mediaFileMimeType(
+    'remote' in target ? target.remote.relativePath : target.filePath
+  )
   if (!mimeType) {
     return null
   }
@@ -70,8 +78,27 @@ export async function handleMediaPreviewRequest(request: Request): Promise<Respo
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response(null, { status: 405 })
   }
+  const { target, store, mimeType } = grant
+  if ('remote' in target) {
+    try {
+      const { size } = await statRemoteMedia(target.remote, request.signal)
+      return await createMediaRangeResponse(request, mimeType, {
+        size,
+        read: async (offset, length) => {
+          const chunk = await readRemoteMediaChunk(target.remote, offset, length, request.signal)
+          if (chunk.byteLength > length) {
+            throw new Error('Remote media chunk exceeded the requested length')
+          }
+          return chunk
+        },
+        close: async () => {}
+      })
+    } catch {
+      // A lost server is not "file missing".
+      return new Response(null, { status: 502 })
+    }
+  }
   try {
-    const { target, store, mimeType } = grant
     // This process cannot serve SSH filesystems.
     if (target.connectionId) {
       return new Response(null, { status: 404 })
