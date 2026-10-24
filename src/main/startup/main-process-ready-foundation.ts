@@ -142,14 +142,15 @@ export async function initializeReadyFoundation(): Promise<void> {
   state.activeOrcaProfile = profile
   // Read durable browser hosting ID before window argv stamps it or renderer and lease ownership diverge.
   initializeBrowserClientHostId(profile.profileDirectory)
-  // Why before the store loads: its pane normalization tells a moved project's retained rows from
-  // a rival host's, and no handler or runtime may give a moving project a new terminal.
-  // Before the fence too: a conversion that rewrites the profile here leaves nothing to fence.
+  // Before the profile store and the fence: a conversion that rewrites the profile here leaves
+  // nothing to fence.
   runPendingWslDriveUncConversions({
     userDataPath: getAppEnvironment().getPath('userData'),
     profileUserDataPath: getProfileUserDataPath(),
     profileId: profile.profile.id
   })
+  // Why before the store loads: its pane normalization tells a moved project's retained rows from
+  // a rival host's, and no handler or runtime may give a moving project a new terminal.
   loadWslMoveFence(getAppEnvironment().getPath('userData'))
   const profileState = await createProfileStateStoreForStartup({
     userDataPath: getProfileUserDataPath(),
