@@ -148,6 +148,28 @@ describe('collectWslDriveUncScope: only real Windows drive folders', () => {
   })
 })
 
+describe('collectWslDriveUncScope overlaps', () => {
+  it('refuses a project nested with a refused one, whose shared folders would split', () => {
+    const repos = [
+      repo('outer', String.raw`\\wsl.localhost\Ubuntu\mnt\c\src`, {
+        worktreeBasePath: String.raw`\\wsl.localhost\Ubuntu\home\me\trees`
+      }),
+      repo('inner', String.raw`\\wsl.localhost\Ubuntu\mnt\c\src\app`),
+      repo('beside', String.raw`\\wsl.localhost\Ubuntu\mnt\c\srcx`)
+    ]
+    expect(
+      collectWslDriveUncScope({ repos, folderWorkspaces: [], projectGroups: [] }, 'Ubuntu', DRIVES)
+    ).toEqual({
+      repoIds: ['beside'],
+      folderWorkspaceIds: [],
+      refused: [
+        { kind: 'repo', id: 'outer', reason: 'mixed-locations' },
+        { kind: 'repo', id: 'inner', reason: 'overlaps-refused-project' }
+      ]
+    })
+  })
+})
+
 describe('wslDriveUncWorktreeId', () => {
   it('keeps the repo id and a folder workspace suffix, and maps only drive paths', () => {
     expect(
