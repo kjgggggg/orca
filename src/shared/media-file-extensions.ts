@@ -14,3 +14,11 @@ export const MEDIA_FILE_MIME_TYPES: Record<string, string> = {
 }
 
 export const MEDIA_PREVIEW_SCHEME = 'orca-media'
+
+export type RemoteMediaAddress = {
+  environmentId: string
+  /** Runtime worktree selector, e.g. 'id:wt-1'. */
+  worktree: string
+  relativePath: string
+  expectedEnvironmentPairingRevision?: number
+}
