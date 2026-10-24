@@ -6,7 +6,7 @@ import { getCanonicalUserDataPath } from '../persistence'
 const STAT_TIMEOUT_MS = 15_000
 const READ_CHUNK_TIMEOUT_MS = 60_000
 
-const UPDATE_REQUIRED_MESSAGE =
+export const UPDATE_REQUIRED_MESSAGE =
   'Playing remote media requires a newer Orca on the paired machine. Update it and try again.'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -95,4 +95,26 @@ export async function readRemoteMediaChunk(
     throw new Error('The paired machine returned a corrupted media chunk.')
   }
   return bytes
+}
+
+const MAX_SUPPORTED_VERDICTS = 64
+const supportedVerdicts = new Map<string, true>()
+
+// Older hosts lack files.readChunk; probing at mint time surfaces the update message before playback.
+export async function assertRemoteMediaReadSupported(
+  address: RemoteMediaAddress,
+  signal: AbortSignal
+): Promise<void> {
+  const key = JSON.stringify([address.environmentId, address.expectedEnvironmentPairingRevision])
+  if (supportedVerdicts.has(key)) {
+    return
+  }
+  await readRemoteMediaChunk(address, 0, 1, signal)
+  if (supportedVerdicts.size >= MAX_SUPPORTED_VERDICTS) {
+    const oldest = supportedVerdicts.keys().next().value
+    if (oldest !== undefined) {
+      supportedVerdicts.delete(oldest)
+    }
+  }
+  supportedVerdicts.set(key, true)
 }

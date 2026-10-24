@@ -417,6 +417,34 @@ describe('runtime file client', () => {
       )
     })
 
+    it('falls through to files.read when the media bridge returns null', async () => {
+      runtimeEnvironmentCall.mockResolvedValue({
+        id: 'rpc-1',
+        ok: true,
+        result: {
+          worktree: 'id:wt-1',
+          relativePath: 'out/clip.mp4',
+          content: 'AA==',
+          isBinary: true,
+          truncated: false,
+          byteLength: 1
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      })
+
+      await readRuntimeFileContent({
+        target: env,
+        filePath: '/remote/repo/out/clip.mp4',
+        relativePath: 'out/clip.mp4',
+        worktreeId: 'wt-1'
+      })
+
+      expect(fsReadRuntimeMediaPreview).toHaveBeenCalledOnce()
+      expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'files.read' })
+      )
+    })
+
     it('plays a chat scratch video', async () => {
       fsReadRuntimeMediaPreview.mockResolvedValue(media)
       const root = `/state/chat-scratch/${'a'.repeat(32)}`

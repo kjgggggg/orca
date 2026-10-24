@@ -26,6 +26,11 @@ import { registerFilesystemChunkReadHandler } from './filesystem-chunk-read-hand
 import { readMediaPreview } from '../../media/media-preview-protocol'
 import { windowsFsPath } from '../../wsl/wsl-unc-drive-fs-path'
 import { assertWslUncPathRunning, guardWslUncPathAccess } from '../../wsl/wsl-unc-access-gate'
+import {
+  UPDATE_REQUIRED_MESSAGE,
+  assertRemoteMediaReadSupported
+} from '../../media/media-preview-remote-reader'
+import { abortWhenRendererGone } from '../renderer-lifetime-abort'
 import type { RemoteMediaAddress } from '../../../shared/media-file-extensions'
 import {
   readLocalFileContent,
@@ -122,8 +127,8 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
 
   ipcMain.handle(
     'fs:readRuntimeMediaPreview',
-    (event, args: RemoteMediaAddress): ReturnType<typeof readMediaPreview> => {
-      const { environmentId, worktree, relativePath } = args
+    async (event, args: RemoteMediaAddress): Promise<ReturnType<typeof readMediaPreview>> => {
+      const { environmentId, worktree, relativePath, expectedEnvironmentPairingRevision } = args
       if (
         typeof environmentId !== 'string' ||
         !environmentId ||
@@ -132,11 +137,30 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         typeof relativePath !== 'string' ||
         !relativePath ||
         /^([/\\]|[A-Za-z]:[/\\])/.test(relativePath) ||
-        relativePath.includes('\0')
+        relativePath.includes('\0') ||
+        (expectedEnvironmentPairingRevision !== undefined &&
+          !Number.isSafeInteger(expectedEnvironmentPairingRevision))
       ) {
         throw new Error('Invalid media path')
       }
-      return readMediaPreview(event, { remote: args }, store)
+      const remote: RemoteMediaAddress = {
+        environmentId,
+        worktree,
+        relativePath,
+        expectedEnvironmentPairingRevision
+      }
+      const lifetime = abortWhenRendererGone(event.sender)
+      try {
+        await assertRemoteMediaReadSupported(remote, lifetime.signal)
+      } catch (error) {
+        // Only the update verdict is final; losing contact is reported by the stream.
+        if (error instanceof Error && error.message === UPDATE_REQUIRED_MESSAGE) {
+          throw error
+        }
+      } finally {
+        lifetime.dispose()
+      }
+      return readMediaPreview(event, { remote }, store)
     }
   )
 

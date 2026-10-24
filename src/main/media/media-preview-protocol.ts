@@ -29,7 +29,7 @@ export function readMediaPreview(
   event: { sender: Pick<WebContents, 'id' | 'on' | 'removeListener'> },
   target: MediaTarget,
   store: Store
-): { content: string; isBinary: boolean; mimeType: string; mediaUrl: string } | null {
+): { content: string; isBinary: true; mimeType: string; mediaUrl: string } | null {
   const mimeType = mediaFileMimeType(
     'remote' in target ? target.remote.relativePath : target.filePath
   )
@@ -80,20 +80,32 @@ export async function handleMediaPreviewRequest(request: Request): Promise<Respo
   }
   const { target, store, mimeType } = grant
   if ('remote' in target) {
+    // Electron's request.signal may never abort; close() cancels the in-flight chunk.
+    const controller = new AbortController()
+    const forwardAbort = (): void => controller.abort()
+    if (request.signal.aborted) {
+      forwardAbort()
+    } else {
+      request.signal.addEventListener('abort', forwardAbort, { once: true })
+    }
     try {
-      const { size } = await statRemoteMedia(target.remote, request.signal)
+      const { size } = await statRemoteMedia(target.remote, controller.signal)
       return await createMediaRangeResponse(request, mimeType, {
         size,
         read: async (offset, length) => {
-          const chunk = await readRemoteMediaChunk(target.remote, offset, length, request.signal)
+          const chunk = await readRemoteMediaChunk(target.remote, offset, length, controller.signal)
           if (chunk.byteLength > length) {
             throw new Error('Remote media chunk exceeded the requested length')
           }
           return chunk
         },
-        close: async () => {}
+        close: async () => {
+          request.signal.removeEventListener('abort', forwardAbort)
+          controller.abort()
+        }
       })
     } catch {
+      request.signal.removeEventListener('abort', forwardAbort)
       // A lost server is not "file missing".
       return new Response(null, { status: 502 })
     }

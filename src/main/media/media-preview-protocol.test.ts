@@ -146,7 +146,44 @@ describe('media preview protocol', () => {
       expect(response.status).toBe(206)
       expect(response.headers.get('Content-Range')).toBe('bytes 2-4/6')
       expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([2, 3, 4])
-      expect(readRemoteMediaChunk).toHaveBeenCalledWith(addr('out/clip.webm'), 2, 3, request.signal)
+      expect(readRemoteMediaChunk).toHaveBeenCalledWith(
+        addr('out/clip.webm'),
+        2,
+        3,
+        expect.any(AbortSignal)
+      )
+    })
+
+    it('cancelling the response body aborts the in-flight remote chunk', async () => {
+      let chunkSignal: AbortSignal | undefined
+      vi.mocked(readRemoteMediaChunk).mockImplementation((_address, _offset, _length, signal) => {
+        chunkSignal = signal
+        return new Promise(() => {})
+      })
+      const response = await handleMediaPreviewRequest(
+        new Request(mint(), { headers: { range: 'bytes=2-4' } })
+      )
+      if (!response.body) {
+        throw new Error('Missing body')
+      }
+      const reader = response.body.getReader()
+      void reader.read()
+      await vi.waitFor(() => expect(chunkSignal).toBeDefined())
+      expect(chunkSignal?.aborted).toBe(false)
+      await reader.cancel()
+      expect(chunkSignal?.aborted).toBe(true)
+    })
+
+    it('forwards request abort to the remote calls', async () => {
+      const controller = new AbortController()
+      let statSignal: AbortSignal | undefined
+      vi.mocked(statRemoteMedia).mockImplementation(async (_address, signal) => {
+        statSignal = signal
+        return { size: 6 }
+      })
+      await handleMediaPreviewRequest(new Request(mint(), { signal: controller.signal }))
+      controller.abort()
+      expect(statSignal?.aborted).toBe(true)
     })
 
     it('HEAD returns the remote size without reading', async () => {

@@ -6,7 +6,12 @@ vi.mock('../ipc/runtime-environments/runtime-environment-transport-routing', () 
 }))
 vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => '/user-data' }))
 
-import { readRemoteMediaChunk, statRemoteMedia } from './media-preview-remote-reader'
+import {
+  UPDATE_REQUIRED_MESSAGE,
+  assertRemoteMediaReadSupported,
+  readRemoteMediaChunk,
+  statRemoteMedia
+} from './media-preview-remote-reader'
 
 const address = {
   environmentId: 'env-1',
@@ -82,5 +87,59 @@ describe('remote media reader', () => {
   it('passes other server errors through', async () => {
     callRuntimeEnvironment.mockResolvedValue(fail('remote_runtime_unavailable', 'gone'))
     await expect(readRemoteMediaChunk(address, 0, 1, signal)).rejects.toThrow('gone')
+  })
+
+  describe('assertRemoteMediaReadSupported', () => {
+    const chunk = ok({ contentBase64: 'AA==', bytesRead: 1, eof: false })
+    const probeAddress = (revision: number) => ({
+      ...address,
+      environmentId: `probe-env-${revision}`,
+      expectedEnvironmentPairingRevision: revision
+    })
+
+    it('probes one byte at offset 0', async () => {
+      callRuntimeEnvironment.mockResolvedValue(chunk)
+      await assertRemoteMediaReadSupported(probeAddress(1), signal)
+      expect(callRuntimeEnvironment).toHaveBeenCalledWith(
+        '/user-data',
+        'probe-env-1',
+        'files.readChunk',
+        { worktree: 'id:wt-1', relativePath: 'out/clip.mp4', offset: 0, length: 1 },
+        60_000,
+        1,
+        undefined,
+        { signal }
+      )
+    })
+
+    it('caches a supported verdict per environment and revision', async () => {
+      callRuntimeEnvironment.mockResolvedValue(chunk)
+      await assertRemoteMediaReadSupported(probeAddress(2), signal)
+      await assertRemoteMediaReadSupported(probeAddress(2), signal)
+      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(1)
+      await assertRemoteMediaReadSupported(probeAddress(3), signal)
+      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
+    })
+
+    it('rejects with the update message and does not cache it', async () => {
+      callRuntimeEnvironment.mockResolvedValue(fail('method_not_found', 'nope'))
+      await expect(assertRemoteMediaReadSupported(probeAddress(4), signal)).rejects.toThrow(
+        UPDATE_REQUIRED_MESSAGE
+      )
+      await expect(assertRemoteMediaReadSupported(probeAddress(4), signal)).rejects.toThrow(
+        UPDATE_REQUIRED_MESSAGE
+      )
+      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not cache other probe errors', async () => {
+      callRuntimeEnvironment.mockResolvedValue(fail('runtime_error', 'offline'))
+      await expect(assertRemoteMediaReadSupported(probeAddress(5), signal)).rejects.toThrow(
+        'offline'
+      )
+      callRuntimeEnvironment.mockResolvedValue(chunk)
+      await assertRemoteMediaReadSupported(probeAddress(5), signal)
+      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
+    })
   })
 })
