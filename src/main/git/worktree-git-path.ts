@@ -9,13 +9,30 @@ import { join, resolve, win32 } from 'node:path'
 import { parseWslUncPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
 import { wslDrivePathUnderRoots } from '../wsl/wsl-automount-root'
 
+// Git keeps these per worktree; everything else under the git dir (`hooks/`, `info/`, `objects/`,
+// `refs/`, `config`, `packed-refs`, …) lives in the common dir, which only real Git resolves.
+const PER_WORKTREE_ENTRIES: ReadonlySet<string> = new Set([
+  'orca',
+  'HEAD',
+  'ORIG_HEAD',
+  'FETCH_HEAD',
+  'MERGE_HEAD',
+  'index',
+  'logs'
+])
+
 export function readWorktreeGitPath(
   worktreePath: string,
   relativePath: string,
-  automountRoots: readonly string[]
+  automountRoots: readonly string[],
+  isDirectory: (path: string) => boolean = directoryExists
 ): string | null {
+  if (!PER_WORKTREE_ENTRIES.has(relativePath.split('/')[0] ?? '')) {
+    return null
+  }
   const gitdir = readGitDir(worktreePath, automountRoots)
-  if (!gitdir) {
+  // A stale or pruned link: real Git reports it, where a write here would recreate half of it.
+  if (!gitdir || !isDirectory(gitdir)) {
     return null
   }
   // A drive or UNC git dir keeps Windows separators wherever this runs.
@@ -48,4 +65,12 @@ function readGitDir(worktreePath: string, automountRoots: readonly string[]): st
   }
   const distro = parseWslUncPath(worktreePath)?.distro
   return distro ? toWindowsWslUncPath(link, distro) : null
+}
+
+function directoryExists(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
 }
