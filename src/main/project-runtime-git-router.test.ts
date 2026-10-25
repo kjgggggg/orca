@@ -54,11 +54,13 @@ function world() {
     const root = [...links.keys()].find((path) => folder.startsWith(path))
     return root ? { root, gitdir: links.get(root) ?? null } : null
   }
+  const automountRoots = ['/mnt/']
   const router = createProjectRuntimeGitRouter(store, {
     readDotGit,
-    realpath: (folder) => realpaths.get(folder) ?? null
+    realpath: (folder) => realpaths.get(folder) ?? null,
+    automountRoots: () => automountRoots
   })
-  return { state, router, links, realpaths, walks: () => walks }
+  return { state, router, links, realpaths, automountRoots, walks: () => walks }
 }
 
 describe('createProjectRuntimeGitRouter', () => {
@@ -159,5 +161,23 @@ describe('createProjectRuntimeGitRouter', () => {
     router.invalidate()
     router(String.raw`G:\scratch`)
     expect(walks()).toBe(2)
+  })
+
+  it("maps a link under a distro's custom mount root into a known WSL project's drive tree", () => {
+    const { router, links, automountRoots } = world()
+    links.set(String.raw`E:\new\rooted`, '/c/src/app/.git/worktrees/rooted')
+    // `[automount] root=/` not read yet: the link names no known project.
+    expect(router(String.raw`E:\new\rooted`)).toBeUndefined()
+    automountRoots.push('/')
+    router.invalidate()
+    expect(router(String.raw`E:\new\rooted`)).toBe('Ubuntu')
+    // Under that root, a path that maps to no project's drive tree still routes nothing.
+    links.set(String.raw`E:\new\elsewhere`, '/c/other/.git/worktrees/elsewhere')
+    expect(router(String.raw`E:\new\elsewhere`)).toBeUndefined()
+  })
+
+  it('names the distros its projects run Git in, for reading their mount roots', () => {
+    const { router } = world()
+    expect(router.distros()).toEqual(['Ubuntu'])
   })
 })

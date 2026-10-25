@@ -23,6 +23,11 @@ import {
 } from './git/command-runner/local-git-runtime-route'
 import { isWslDistroRunningForBackgroundWork } from './wsl-background-distro-gate'
 import { wslHostsGateOpen } from './wsl/wsl-host-gate'
+import {
+  followWslAutomountRoots,
+  knownWslAutomountRoots,
+  onWslAutomountRootsChanged
+} from './wsl/wsl-automount-root'
 
 export type ProjectRuntimeGitRouterStore = {
   getRepos: () => Repo[]
@@ -38,6 +43,8 @@ export type ProjectRuntimeGitRouterFs = {
   readDotGit: DotGitReader
   /** The real folder behind a symlink, junction or `subst` drive; null when it can't be read. */
   realpath: (folder: string) => string | null
+  /** Each WSL project distro's drive mount root (`/mnt/` by default), for links WSL Git wrote. */
+  automountRoots: () => readonly string[]
 }
 
 type Route = { root: string; wslDistro: string | undefined }
@@ -45,11 +52,17 @@ type Route = { root: string; wslDistro: string | undefined }
 export type ProjectRuntimeGitRouter = LocalGitRuntimeRouter & {
   /** Drops the table and every traced folder; the next lookup rebuilds from the store. */
   invalidate: () => void
+  /** The distros the projects' Git runs in. */
+  distros: () => string[]
 }
 
 export function createProjectRuntimeGitRouter(
   store: ProjectRuntimeGitRouterStore,
-  fs: ProjectRuntimeGitRouterFs = { readDotGit: readNearestDotGit, realpath: readRealpath }
+  fs: ProjectRuntimeGitRouterFs = {
+    readDotGit: readNearestDotGit,
+    realpath: readRealpath,
+    automountRoots: knownWslAutomountRoots
+  }
 ): ProjectRuntimeGitRouter {
   let routes: Route[] | null = null
   // Bumped by each write, so a miss rebuilds the table at most once per write.
@@ -67,11 +80,14 @@ export function createProjectRuntimeGitRouter(
     if (!found) {
       return undefined
     }
-    // A worktree created a moment ago has no metadata yet: follow its link to its repo.
-    const target = found.gitdir === null ? found.root : linkedRepoPath(found.root, found.gitdir)
-    if (target === null) {
-      return undefined
+    if (found.gitdir !== null) {
+      // A worktree created a moment ago has no metadata yet: follow its link to its repo.
+      const repos = linkedRepoPaths(found.root, found.gitdir, fs.automountRoots())
+      return repos
+        .map((repo) => lookup(normalizeRuntimePathForComparison(repo)))
+        .find((route) => route !== undefined)?.wslDistro
     }
+    const target = found.root
     const known = lookup(normalizeRuntimePathForComparison(target))
     if (known) {
       return known.wslDistro
@@ -97,36 +113,44 @@ export function createProjectRuntimeGitRouter(
     }
     return traced.get(folder)
   }
+  const invalidate = (): void => {
+    routes = null
+    traced.clear()
+    generation += 1
+  }
   return Object.assign(route, {
-    invalidate: () => {
-      routes = null
-      traced.clear()
-      generation += 1
-    }
+    invalidate,
+    distros: () => [...new Set(table().flatMap(({ wslDistro }) => (wslDistro ? [wslDistro] : [])))]
   })
 }
 
-const AUTOMOUNT_DRIVE = /^\/mnt\/([a-z])(\/.*)?$/i
-
 /**
- * The main checkout a linked worktree's `gitdir` points into; null for anything else. Windows Git
- * writes a drive path; WSL Git writes the distro's view, `/mnt/<drive>/…` under the default
- * automount root. A link into the distro itself (`/home/…`, `//wsl.localhost/…`) names no drive
- * folder this router routes.
+ * The main checkouts a linked worktree's `gitdir` may point into, most likely first. Windows Git
+ * writes a drive path; WSL Git writes the distro's view, `<automount root><drive>/…`, and the
+ * root differs per distro, so each known root is a candidate the caller checks against its
+ * projects. A link into the distro itself (`/home/…`, `//wsl.localhost/…`) names no drive folder.
  */
-function linkedRepoPath(root: string, gitdir: string): string | null {
-  const drive = AUTOMOUNT_DRIVE.exec(gitdir)
-  const windowsForm = drive
-    ? `${drive[1].toUpperCase()}:${(drive[2] ?? '/').replace(/\//g, '\\')}`
-    : /^[\\/]/.test(gitdir)
-      ? null
-      : win32.resolve(root, gitdir)
-  const match = windowsForm ? /^(.*)[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(windowsForm) : null
-  if (!match) {
-    return null
-  }
-  const commonDir = win32.resolve(match[1])
-  return win32.basename(commonDir).toLowerCase() === '.git' ? win32.dirname(commonDir) : null
+function linkedRepoPaths(
+  root: string,
+  gitdir: string,
+  automountRoots: readonly string[]
+): string[] {
+  const windowsForms = /^[\\/]/.test(gitdir)
+    ? automountRoots.flatMap((mount) => {
+        const prefix = mount.endsWith('/') ? mount : `${mount}/`
+        const drive = gitdir.startsWith(prefix)
+          ? /^([a-z])(\/.*)?$/i.exec(gitdir.slice(prefix.length))
+          : null
+        return drive ? [`${drive[1].toUpperCase()}:${(drive[2] ?? '/').replace(/\//g, '\\')}`] : []
+      })
+    : [win32.resolve(root, gitdir)]
+  return windowsForms.flatMap((form) => {
+    const match = /^(.*)[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(form)
+    const commonDir = match ? win32.resolve(match[1]) : null
+    return commonDir && win32.basename(commonDir).toLowerCase() === '.git'
+      ? [win32.dirname(commonDir)]
+      : []
+  })
 }
 
 // Deep enough for any checkout, bounded so a cwd on a dead mapped drive stats only so far.
@@ -251,5 +275,8 @@ export function installProjectRuntimeGitRouter(
       router.invalidate()
     }
   })
+  // A distro's mount root changes how links its Git wrote map back to a drive.
+  followWslAutomountRoots(router.distros)
+  onWslAutomountRootsChanged(router.invalidate)
   setLocalGitRuntimeRouter(router)
 }
