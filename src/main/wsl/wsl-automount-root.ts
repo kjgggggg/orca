@@ -104,6 +104,20 @@ export async function readWslAutomountRoot(distro: string): Promise<string | nul
   return parseWslAutomountRoot(fence.readStdout(result.stdout))
 }
 
+/** A WSL path under one of `roots` as its Windows drive path (`/mnt/c/x` → `C:\\x`); null otherwise. */
+export function wslDrivePathUnderRoots(path: string, roots: readonly string[]): string | null {
+  for (const root of roots) {
+    const prefix = root.endsWith('/') ? root : `${root}/`
+    const drive = path.startsWith(prefix)
+      ? /^([a-z])(\/.*)?$/i.exec(path.slice(prefix.length))
+      : null
+    if (drive) {
+      return `${drive[1].toUpperCase()}:${(drive[2] ?? '/').replace(/\//g, '\\')}`
+    }
+  }
+  return null
+}
+
 /** `/mnt/c/` → `/mnt/`; `/c/` → `/`; null for anything else. */
 export function parseWslAutomountRoot(drivePath: string | null): string | null {
   const match = drivePath?.trim().match(/^(\/(?:[^\n]*\/)?)[a-zA-Z]\/?$/)

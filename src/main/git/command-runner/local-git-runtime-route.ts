@@ -30,6 +30,11 @@ export function setBackgroundWslGitGate(next: ((distro: string) => Promise<boole
   isDistroRunning = next
 }
 
+/** True with the D1c router on, so callers can pick routing-aware paths only then. */
+export function isLocalGitRuntimeRouterInstalled(): boolean {
+  return router !== null
+}
+
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/
 
 export function routeLocalGitOptions<T extends RoutableGitOptions>(options: T): T {

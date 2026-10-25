@@ -26,7 +26,8 @@ import { wslHostsGateOpen } from './wsl/wsl-host-gate'
 import {
   followWslAutomountRoots,
   knownWslAutomountRoots,
-  onWslAutomountRootsChanged
+  onWslAutomountRootsChanged,
+  wslDrivePathUnderRoots
 } from './wsl/wsl-automount-root'
 
 export type ProjectRuntimeGitRouterStore = {
@@ -136,13 +137,7 @@ function linkedRepoPaths(
   automountRoots: readonly string[]
 ): string[] {
   const windowsForms = /^[\\/]/.test(gitdir)
-    ? automountRoots.flatMap((mount) => {
-        const prefix = mount.endsWith('/') ? mount : `${mount}/`
-        const drive = gitdir.startsWith(prefix)
-          ? /^([a-z])(\/.*)?$/i.exec(gitdir.slice(prefix.length))
-          : null
-        return drive ? [`${drive[1].toUpperCase()}:${(drive[2] ?? '/').replace(/\//g, '\\')}`] : []
-      })
+    ? automountRoots.flatMap((mount) => wslDrivePathUnderRoots(gitdir, [mount]) ?? [])
     : [win32.resolve(root, gitdir)]
   return windowsForms.flatMap((form) => {
     const match = /^(.*)[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(form)

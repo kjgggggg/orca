@@ -2,25 +2,28 @@ import { execFileSync, type SpawnOptions } from 'node:child_process'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { untranslatedGitOutputEnv } from './git-process-env'
 import { resolveCommand } from './wsl-command-resolution'
-import { routeLocalGitOptions } from './local-git-runtime-route'
 
 // Bound synchronous Git: a dead network drive can freeze the main thread.
 const GIT_EXEC_SYNC_TIMEOUT_MS = 15_000
 
-/** Return trimmed stdout; prefer async execution to avoid blocking main. */
+type HostGitOnly = true
+
+/**
+ * Return trimmed stdout; prefer async execution to avoid blocking main. Host Git, never routed:
+ * routing would turn this one main-thread launch into a synchronous wsl.exe.
+ */
 export function gitExecFileSync(
   args: string[],
-  callerOptions: {
+  options: {
     cwd: string
-    wslDistro?: string
-    hostGit?: true
+    /** Every caller is host-only; see the routing guard test. */
+    hostGit: HostGitOnly
     encoding?: BufferEncoding
     stdio?: SpawnOptions['stdio']
     timeout?: number
   }
 ): string {
-  const options = routeLocalGitOptions(callerOptions)
-  const resolved = resolveCommand('git', args, options.cwd, options.wslDistro)
+  const resolved = resolveCommand('git', args, options.cwd)
   const spawnStartedAt = performance.now()
   try {
     return execFileSync(resolved.binary, resolved.args, {

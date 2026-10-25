@@ -7,12 +7,7 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const RUNNER_DIR = join(__dirname)
-const ENTRY_FILES = [
-  'git-exec-file.ts',
-  'git-exec-file-sync.ts',
-  'git-spawn.ts',
-  'git-stream-stdout.ts'
-]
+const ENTRY_FILES = ['git-exec-file.ts', 'git-spawn.ts', 'git-stream-stdout.ts']
 // Tests, mocks, harnesses and fixtures stand in for Git; they run none.
 const TEST_SUPPORT = /\.test\.ts$|mock|harness|fixture/i
 const MAIN_DIR = join(__dirname, '..', '..')
@@ -51,7 +46,7 @@ describe('local Git runtime routing guard', () => {
         )
       }
     }
-    expect(checked).toHaveLength(7)
+    expect(checked).toHaveLength(6)
   })
 
   it('has a reason above every deliberate host-Git call', () => {
@@ -83,7 +78,15 @@ describe('local Git runtime routing guard', () => {
       // The remote read while a project is being added.
       'src/main/repo-icon-autodetect.ts',
       'src/main/runtime/runtime-repository-clone-controller.ts',
-      'src/main/runtime/runtime-repository-registration-controller.ts'
+      'src/main/runtime/runtime-repository-registration-controller.ts',
+      // The setup runner's path lookup, synchronous; with the router on it reads the link instead.
+      'src/main/worktree-runner-script.ts'
     ])
+  })
+
+  it('keeps synchronous Git host-only, so routing never puts wsl.exe on the main thread', () => {
+    const sync = readFileSync(join(RUNNER_DIR, 'git-exec-file-sync.ts'), 'utf8')
+    expect(sync).not.toContain('routeLocalGitOptions')
+    expect(sync).toContain('hostGit: HostGitOnly')
   })
 })
