@@ -7,18 +7,29 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const RUNNER_DIR = join(__dirname)
-const ENTRY_FILES = ['git-exec-file.ts', 'git-spawn.ts', 'git-stream-stdout.ts']
-// git-exec-file-sync.ts is host-only on purpose: its callers run before a project exists.
+const ENTRY_FILES = [
+  'git-exec-file.ts',
+  'git-exec-file-sync.ts',
+  'git-spawn.ts',
+  'git-stream-stdout.ts'
+]
 // Tests, mocks, harnesses and fixtures stand in for Git; they run none.
 const TEST_SUPPORT = /\.test\.ts$|mock|harness|fixture/i
 const MAIN_DIR = join(__dirname, '..', '..')
 const REPO_ROOT = join(MAIN_DIR, '..', '..')
 
+const COMMENT_LINE = /^\s*(\*|\/\/|\/\*)/
+
+/** Files whose code, not only a comment, contains `text`. */
 function sourcesMentioning(text: string): string[] {
   return readdirSync(MAIN_DIR, { recursive: true, encoding: 'utf8' })
     .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT.test(file))
     .map((file) => join(MAIN_DIR, file))
-    .filter((file) => readFileSync(file, 'utf8').includes(text))
+    .filter((file) =>
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .some((line) => line.includes(text) && !COMMENT_LINE.test(line))
+    )
     .map((file) => relative(REPO_ROOT, file).replaceAll('\\', '/'))
 }
 
@@ -40,7 +51,7 @@ describe('local Git runtime routing guard', () => {
         )
       }
     }
-    expect(checked).toHaveLength(6)
+    expect(checked).toHaveLength(7)
   })
 
   it('has a reason above every deliberate host-Git call', () => {
@@ -50,7 +61,7 @@ describe('local Git runtime routing guard', () => {
       const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
       lines.forEach((line, index) => {
         // Code only: a doc comment may name the option.
-        if (!line.includes('hostGit: true') || /^\s*(\*|\/\/)/.test(line)) {
+        if (!line.includes('hostGit: true') || COMMENT_LINE.test(line)) {
           return
         }
         const above = [lines[index - 1] ?? '', lines[index - 2] ?? ''].join('\n')
@@ -59,13 +70,20 @@ describe('local Git runtime routing guard', () => {
     }
   })
 
-  it('keeps unrouted synchronous Git to the callers that run before a project exists', () => {
-    const callers = sourcesMentioning('gitExecFileSync').sort()
-    expect(callers).toEqual([
-      'src/main/git/command-runner/git-exec-file-sync.ts',
+  it('keeps deliberate host Git to the calls that run before a project owns the folder', () => {
+    expect(sourcesMentioning('hostGit: true').sort()).toEqual([
+      // Repo detection, read-only.
       'src/main/git/repo-detection-command.ts',
-      'src/main/git/runner.ts',
-      'src/main/worktree-runner-script.ts'
+      // Clone and init make a new repo.
+      'src/main/ipc/repos/repo-clone-lifecycle.ts',
+      'src/main/ipc/repos/repo-creation-handlers.ts',
+      // The checks whether Git for Windows can take a project over.
+      'src/main/ipc/wsl-drive-project-handlers.ts',
+      'src/main/ipc/wsl-drive-unc-conversion-handlers.ts',
+      // The remote read while a project is being added.
+      'src/main/repo-icon-autodetect.ts',
+      'src/main/runtime/runtime-repository-clone-controller.ts',
+      'src/main/runtime/runtime-repository-registration-controller.ts'
     ])
   })
 })

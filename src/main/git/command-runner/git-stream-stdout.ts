@@ -24,7 +24,7 @@ import { nonInteractiveGitEnv, untranslatedGitOutputEnv } from './git-process-en
 import { gitSpawn } from './git-spawn'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { GitCommandTimeoutError, gitCommandTimeoutMs } from './git-command-timeout'
-import { routeLocalGitOptions } from './local-git-runtime-route'
+import { routeLocalGitOptions, runAdmittedWslGit } from './local-git-runtime-route'
 
 /** Result of a streamed git command; `stoppedEarly` is true when onStdout asked to stop before the child exited. */
 export type GitStreamResult = { stoppedEarly: boolean }
@@ -56,6 +56,15 @@ export async function gitStreamStdout(
   const options = routeLocalGitOptions(callerOptions)
   const maxBuffer = options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER
   const timeoutMs = gitCommandTimeoutMs(args, options.timeoutMs, options.timeoutMsForTest)
+  return runAdmittedWslGit(options, () => streamInSpan(args, options, maxBuffer, timeoutMs))
+}
+
+function streamInSpan(
+  args: string[],
+  options: GitStreamOptions,
+  maxBuffer: number,
+  timeoutMs: number | undefined
+): Promise<GitStreamResult> {
   return withGitSpan({ args, cwd: options.cwd }, async (span) => {
     const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(args, options)
     if (checkoutRoutingReady) {

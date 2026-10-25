@@ -7,7 +7,7 @@
  * folder the table doesn't know is traced through its `.git` link to the repo it belongs to.
  */
 import { win32 } from 'node:path'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { normalizeRuntimePathForComparison } from '../shared/cross-platform-path'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../shared/execution-host'
 import { resolveProjectExecutionRuntime } from '../shared/project-execution-runtime'
@@ -17,9 +17,11 @@ import { isFolderRepo } from '../shared/repo-kind'
 import type { Repo } from '../shared/repo-types'
 import { getRepoIdFromWorktreeId, splitWorktreeIdForFilesystem } from '../shared/worktree/id'
 import {
+  setBackgroundWslGitGate,
   setLocalGitRuntimeRouter,
   type LocalGitRuntimeRouter
 } from './git/command-runner/local-git-runtime-route'
+import { isWslDistroRunningForBackgroundWork } from './wsl-background-distro-gate'
 import { wslHostsGateOpen } from './wsl/wsl-host-gate'
 
 export type ProjectRuntimeGitRouterStore = {
@@ -32,60 +34,108 @@ export type ProjectRuntimeGitRouterStore = {
 /** The `.git` entry at or above a folder: a main checkout's directory or a worktree's link file. */
 export type DotGitReader = (folder: string) => { root: string; gitdir: string | null } | null
 
+export type ProjectRuntimeGitRouterFs = {
+  readDotGit: DotGitReader
+  /** The real folder behind a symlink, junction or `subst` drive; null when it can't be read. */
+  realpath: (folder: string) => string | null
+}
+
 type Route = { root: string; wslDistro: string | undefined }
 
 export type ProjectRuntimeGitRouter = LocalGitRuntimeRouter & {
-  /** Drops the table; the next lookup rebuilds it from the store. */
+  /** Drops the table and every traced folder; the next lookup rebuilds from the store. */
   invalidate: () => void
 }
 
 export function createProjectRuntimeGitRouter(
   store: ProjectRuntimeGitRouterStore,
-  readDotGit: DotGitReader = readNearestDotGit
+  fs: ProjectRuntimeGitRouterFs = { readDotGit: readNearestDotGit, realpath: readRealpath }
 ): ProjectRuntimeGitRouter {
   let routes: Route[] | null = null
+  // Bumped by each write, so a miss rebuilds the table at most once per write.
+  let generation = 0
+  let rebuiltForGeneration = -1
+  // Each folder is traced once per write; the walk stats the disk, on the main thread.
+  const traced = new Map<string, string | undefined>()
   const table = (): Route[] => (routes ??= buildRoutes(store))
   const lookup = (folder: string): Route | undefined =>
     table().find(
       ({ root }) => folder === root || folder.startsWith(root.endsWith('/') ? root : `${root}/`)
     )
+  const trace = (cwd: string): string | undefined => {
+    const found = fs.readDotGit(cwd)
+    if (!found) {
+      return undefined
+    }
+    // A worktree created a moment ago has no metadata yet: follow its link to its repo.
+    const target = found.gitdir === null ? found.root : linkedRepoPath(found.root, found.gitdir)
+    if (target === null) {
+      return undefined
+    }
+    const known = lookup(normalizeRuntimePathForComparison(target))
+    if (known) {
+      return known.wslDistro
+    }
+    // A symlink, junction or `subst` drive can name a WSL project's checkout under another path.
+    const real = fs.realpath(target)
+    return real ? lookup(normalizeRuntimePathForComparison(real))?.wslDistro : undefined
+  }
   const route = (cwd: string): string | undefined => {
     const folder = normalizeRuntimePathForComparison(cwd)
-    const wasBuilt = routes !== null
     let known = lookup(folder)
-    if (!known && wasBuilt) {
+    if (!known && rebuiltForGeneration !== generation) {
       // A miss rebuilds once, in case a write reached the store without a change event.
+      rebuiltForGeneration = generation
       routes = null
       known = lookup(folder)
     }
     if (known) {
       return known.wslDistro
     }
-    // A worktree created a moment ago has no metadata yet: follow its link to its repo.
-    const repoPath = linkedRepoPath(cwd, readDotGit)
-    return repoPath ? lookup(normalizeRuntimePathForComparison(repoPath))?.wslDistro : undefined
+    if (!traced.has(folder)) {
+      traced.set(folder, trace(cwd))
+    }
+    return traced.get(folder)
   }
   return Object.assign(route, {
     invalidate: () => {
       routes = null
+      traced.clear()
+      generation += 1
     }
   })
 }
 
-/** The main checkout a linked worktree's `.git` file points into; null for anything else. */
-function linkedRepoPath(cwd: string, readDotGit: DotGitReader): string | null {
-  const found = readDotGit(cwd)
-  const match = found?.gitdir ? /^(.*)[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(found.gitdir) : null
-  if (!found || !match) {
+const AUTOMOUNT_DRIVE = /^\/mnt\/([a-z])(\/.*)?$/i
+
+/**
+ * The main checkout a linked worktree's `gitdir` points into; null for anything else. Windows Git
+ * writes a drive path; WSL Git writes the distro's view, `/mnt/<drive>/…` under the default
+ * automount root. A link into the distro itself (`/home/…`, `//wsl.localhost/…`) names no drive
+ * folder this router routes.
+ */
+function linkedRepoPath(root: string, gitdir: string): string | null {
+  const drive = AUTOMOUNT_DRIVE.exec(gitdir)
+  const windowsForm = drive
+    ? `${drive[1].toUpperCase()}:${(drive[2] ?? '/').replace(/\//g, '\\')}`
+    : /^[\\/]/.test(gitdir)
+      ? null
+      : win32.resolve(root, gitdir)
+  const match = windowsForm ? /^(.*)[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(windowsForm) : null
+  if (!match) {
     return null
   }
-  const commonDir = win32.resolve(found.root, match[1])
+  const commonDir = win32.resolve(match[1])
   return win32.basename(commonDir).toLowerCase() === '.git' ? win32.dirname(commonDir) : null
 }
 
+// Deep enough for any checkout, bounded so a cwd on a dead mapped drive stats only so far.
+const MAX_WALK_DEPTH = 16
+
 /** Windows paths only: the router routes drive-path folders. */
 function readNearestDotGit(folder: string): { root: string; gitdir: string | null } | null {
-  for (let current = folder; ; current = win32.dirname(current)) {
+  let current = folder
+  for (let depth = 0; depth < MAX_WALK_DEPTH; depth += 1) {
     const entry = win32.join(current, '.git')
     try {
       if (statSync(entry).isDirectory()) {
@@ -96,9 +146,20 @@ function readNearestDotGit(folder: string): { root: string; gitdir: string | nul
     } catch {
       // No `.git` here; keep walking up.
     }
-    if (win32.dirname(current) === current) {
+    const parent = win32.dirname(current)
+    if (parent === current) {
       return null
     }
+    current = parent
+  }
+  return null
+}
+
+function readRealpath(folder: string): string | null {
+  try {
+    return realpathSync.native(folder)
+  } catch {
+    return null
   }
 }
 
@@ -179,8 +240,10 @@ export function installProjectRuntimeGitRouter(
 ): void {
   if (process.platform !== 'win32' || !wslHostsGateOpen()) {
     setLocalGitRuntimeRouter(null)
+    setBackgroundWslGitGate(null)
     return
   }
+  setBackgroundWslGitGate(isWslDistroRunningForBackgroundWork)
   const router = createProjectRuntimeGitRouter(store)
   // Synchronous with the write, so no Git call can run between a change and the table's drop.
   store.onStateWritten((domains) => {

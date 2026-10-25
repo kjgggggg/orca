@@ -10,7 +10,7 @@ import type { GitAdmissionTier } from './git-exec-options'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { classifyGitCommand } from '../../../shared/git-command-classification'
 import { buildNetworkSshPolicyEnv } from './git-ssh-policy-env'
-import { routeLocalGitOptions } from './local-git-runtime-route'
+import { admitWslGit, routeLocalGitOptions } from './local-git-runtime-route'
 
 export type GitSpawnOptions = SpawnOptions & {
   cwd: string
@@ -59,6 +59,7 @@ export async function withGitAdmission(
 ): Promise<ChildProcess> {
   const options = routeLocalGitOptions(callerOptions)
   const spawnRouted = spawnChild ?? (() => gitSpawn(args, options))
+  await admitWslGit(options)
   const span = startGitSpan({ args, cwd: options.cwd })
   let grant: Awaited<ReturnType<typeof acquireGitAdmission>> | null = null
   try {

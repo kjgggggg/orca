@@ -169,6 +169,7 @@ async function enrichRepoGitRemoteIdentity(store: RepoIdentityStore, repo: Repo)
     }
     const result = await probeGitRemoteIdentity(repo.path, hostId, {
       signal: controller.signal,
+      admissionTier: 'background',
       // A local project's runtime may run its Git in a distro, whatever its path.
       ...getProjectRuntimeReadGitOptions(store, repo)
     })

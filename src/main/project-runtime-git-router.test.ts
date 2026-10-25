@@ -45,12 +45,20 @@ function world() {
     getSettings: () => ({ localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' } }),
     getAllWorktreeMeta: () => Object.fromEntries(state.worktreeMeta)
   }
-  const links = new Map<string, string>()
+  // A null link is a main checkout's `.git` folder.
+  const links = new Map<string, string | null>()
+  const realpaths = new Map<string, string>()
+  let walks = 0
   const readDotGit: DotGitReader = (folder) => {
+    walks += 1
     const root = [...links.keys()].find((path) => folder.startsWith(path))
     return root ? { root, gitdir: links.get(root) ?? null } : null
   }
-  return { state, router: createProjectRuntimeGitRouter(store, readDotGit), links }
+  const router = createProjectRuntimeGitRouter(store, {
+    readDotGit,
+    realpath: (folder) => realpaths.get(folder) ?? null
+  })
+  return { state, router, links, realpaths, walks: () => walks }
 }
 
 describe('createProjectRuntimeGitRouter', () => {
@@ -99,12 +107,17 @@ describe('createProjectRuntimeGitRouter', () => {
     expect(router(String.raw`E:\new\fast-wt`)).toBeUndefined()
   })
 
-  it('rebuilds once on a miss, in case a write came without a change event', () => {
+  it('rebuilds on a miss at most once per write, in case a write came without its event', () => {
     const { state, router } = world()
-    expect(router(String.raw`F:\added`)).toBeUndefined()
+    expect(router(String.raw`C:\src\app`)).toBe('Ubuntu')
     state.repos = [...state.repos, repo('added', String.raw`F:\added`)]
     state.projects = [...state.projects, project('added')]
     expect(router(String.raw`F:\added\src`)).toBe('Ubuntu')
+    state.repos = [...state.repos, repo('later', String.raw`H:\later`)]
+    state.projects = [...state.projects, project('later')]
+    expect(router(String.raw`H:\later`)).toBeUndefined()
+    router.invalidate()
+    expect(router(String.raw`H:\later`)).toBe('Ubuntu')
   })
 
   it('routes by the saved preference even when the distro is missing, so Git fails in WSL', () => {
@@ -116,5 +129,35 @@ describe('createProjectRuntimeGitRouter', () => {
     )
     router.invalidate()
     expect(router(String.raw`C:\src\app`)).toBe('Gone')
+  })
+
+  it('routes a worktree WSL Git made, whose link is the distro view of the drive', () => {
+    const { router, links } = world()
+    links.set(String.raw`E:\new\wsl-made`, '/mnt/c/src/app/.git/worktrees/wsl-made')
+    expect(router(String.raw`E:\new\wsl-made\pkg`)).toBe('Ubuntu')
+    links.set(String.raw`E:\new\relative`, '../../src/app/.git/worktrees/relative')
+    links.set(String.raw`C:\x\y`, '../../src/app/.git/worktrees/relative')
+    expect(router(String.raw`C:\x\y`)).toBe('Ubuntu')
+    links.set(String.raw`E:\new\in-distro`, '/home/me/app/.git/worktrees/in-distro')
+    expect(router(String.raw`E:\new\in-distro`)).toBeUndefined()
+    links.set(String.raw`E:\new\unc`, '//wsl.localhost/Ubuntu/home/me/app/.git/worktrees/unc')
+    expect(router(String.raw`E:\new\unc`)).toBeUndefined()
+  })
+
+  it('routes a main checkout reached through a symlink, junction or subst drive by its real folder', () => {
+    const { router, links, realpaths } = world()
+    links.set(String.raw`S:\app`, null)
+    realpaths.set(String.raw`S:\app`, String.raw`C:\src\app`)
+    expect(router(String.raw`S:\app\src`)).toBe('Ubuntu')
+  })
+
+  it('traces each unknown folder once per write, and again after the next write', () => {
+    const { router, walks } = world()
+    router(String.raw`G:\scratch`)
+    router(String.raw`G:\scratch`)
+    expect(walks()).toBe(1)
+    router.invalidate()
+    router(String.raw`G:\scratch`)
+    expect(walks()).toBe(2)
   })
 })

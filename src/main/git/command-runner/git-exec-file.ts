@@ -26,7 +26,7 @@ import { createAbortError } from './abort-error'
 import { readCapturedGitBuffer, readCapturedGitString } from './captured-git-output'
 import { runUnlessGitCwdKnownMissing } from './missing-git-spawn-cwd'
 import { trackGitWorktreeMutation } from '../git-worktree-mutation-state'
-import { routeLocalGitOptions } from './local-git-runtime-route'
+import { routeLocalGitOptions, runAdmittedWslGit } from './local-git-runtime-route'
 
 async function gitExecFileAsyncUnlocked(
   args: string[],
@@ -183,15 +183,17 @@ export function gitExecFileAsync(
   const terminationState: { current: Promise<void> | null } = { current: null }
   const command = resolveGitFetchHeadCommand(args, options.cwd)
   // Missing folders start no child and must not record a git.exec span.
-  const result = runUnlessGitCwdKnownMissing(options, () =>
-    command.needsLock
-      ? runWithGitFetchHeadLock(
-          command.cwd,
-          options.signal,
-          () => gitExecFileAsyncUnlocked(args, options, terminationState),
-          command.gitDir
-        )
-      : gitExecFileAsyncUnlocked(args, options, terminationState)
+  const result = runAdmittedWslGit(options, () =>
+    runUnlessGitCwdKnownMissing(options, () =>
+      command.needsLock
+        ? runWithGitFetchHeadLock(
+            command.cwd,
+            options.signal,
+            () => gitExecFileAsyncUnlocked(args, options, terminationState),
+            command.gitDir
+          )
+        : gitExecFileAsyncUnlocked(args, options, terminationState)
+    )
   )
   return result.finally(() => {
     // A timed-out caller can settle before its child exits.
@@ -283,5 +285,7 @@ export function gitExecFileAsyncBuffer(
   callerOptions: Parameters<typeof gitExecFileAsyncBufferInSpan>[1]
 ): Promise<{ stdout: Buffer }> {
   const options = routeLocalGitOptions(callerOptions)
-  return runUnlessGitCwdKnownMissing(options, () => gitExecFileAsyncBufferInSpan(args, options))
+  return runAdmittedWslGit(options, () =>
+    runUnlessGitCwdKnownMissing(options, () => gitExecFileAsyncBufferInSpan(args, options))
+  )
 }
