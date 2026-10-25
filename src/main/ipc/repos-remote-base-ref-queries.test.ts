@@ -26,7 +26,7 @@ import { registerRepoHandlers } from './repos'
 import { clearGitCapabilityStateForTests } from '../git/git-capability-state'
 import { resetSshProviderAuthorities } from '../ssh/ssh-provider-authority'
 import { createRepoHandlerHarness } from './repos-remote-test-harness'
-import { getBaseRefDefault } from '../git/repo'
+import { getBaseRefDefault, getRemoteCount } from '../git/repo'
 
 const { handleMock, mockStore, gitExecFileAsyncMock, prepareLocalWorktreeRootForRepoMock } =
   reposMocks
@@ -160,5 +160,45 @@ describe('repos:searchBaseRefs on SSH repos', () => {
     })
 
     expect(result).toEqual([])
+  })
+})
+
+describe('base-ref queries on a drive project whose runtime is WSL', () => {
+  const { handlers, mockWindow, captureHandlers } = createRepoHandlerHarness()
+  const originalPlatform = process.platform
+  const repo = { id: 'r1', path: String.raw`C:\repo`, kind: 'git' }
+
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    captureHandlers(handleMock)
+    mockStore.getRepo.mockReset().mockReturnValue(repo)
+    mockStore.getProjects
+      .mockReset()
+      .mockReturnValue([{ id: 'p1', sourceRepoIds: ['r1'], createdAt: 0, updatedAt: 0 }])
+    Object.assign(mockStore, {
+      getSettings: () => ({ localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' } })
+    })
+    gitExecFileAsyncMock.mockReset().mockResolvedValue({ stdout: '', stderr: '' })
+    vi.mocked(getBaseRefDefault).mockClear()
+    registerRepoHandlers(mockWindow as never, mockStore as never, {} as never)
+    return () => {
+      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+      Reflect.deleteProperty(mockStore, 'getSettings')
+    }
+  })
+
+  it('reads the default base and remote count with the distro Git', async () => {
+    await handlers.get('repos:getBaseRefDefault')!(null, { repoId: 'r1' })
+
+    expect(getBaseRefDefault).toHaveBeenCalledWith(repo.path, { wslDistro: 'Ubuntu' })
+    expect(getRemoteCount).toHaveBeenCalledWith(repo.path, { wslDistro: 'Ubuntu' })
+  })
+
+  it('searches base refs with the distro Git', async () => {
+    await handlers.get('repos:searchBaseRefDetails')!(null, { repoId: 'r1', query: 'main' })
+
+    const commands = gitExecFileAsyncMock.mock.calls.map(([args, options]) => [args[0], options])
+    expect(commands).toContainEqual(['remote', { cwd: repo.path, wslDistro: 'Ubuntu' }])
+    expect(commands).toContainEqual(['for-each-ref', { cwd: repo.path, wslDistro: 'Ubuntu' }])
   })
 })

@@ -123,6 +123,41 @@ describe('enrichMissingRepoGitRemoteIdentities', () => {
     expect(onChanged).toHaveBeenCalledTimes(1)
   })
 
+  it('probes a drive project whose runtime is WSL with the distro Git', async () => {
+    vi.mocked(probeGitRemoteIdentity).mockResolvedValue(resolvedProbe)
+    const repo = makeRepo({ path: String.raw`C:\src\app` })
+    const store = {
+      ...makeStore(repo),
+      getProjects: () => [
+        {
+          id: 'p1',
+          displayName: 'app',
+          badgeColor: '',
+          sourceRepoIds: [repo.id],
+          createdAt: 0,
+          updatedAt: 0
+        }
+      ],
+      getSettings: () => ({
+        localWindowsRuntimeDefault: { kind: 'wsl' as const, distro: 'Ubuntu' }
+      })
+    }
+    const originalPlatform = process.platform
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    try {
+      enrichMissingRepoGitRemoteIdentities(store)
+    } finally {
+      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+    }
+
+    expect(probeGitRemoteIdentity).toHaveBeenCalledWith(
+      repo.path,
+      'local',
+      expect.objectContaining({ wslDistro: 'Ubuntu' })
+    )
+    await flushRepoGitRemoteIdentityEnrichmentForTests()
+  })
+
   it('probes an SSH row that carries only executionHostId on its own host', async () => {
     vi.mocked(probeGitRemoteIdentity).mockResolvedValue(resolvedProbe)
     const store = makeStore(makeRepo({ executionHostId: 'ssh:builder' }))
