@@ -87,6 +87,30 @@ describe('startWslDriveUncConversion', () => {
     expect(run.restart).toHaveBeenCalledOnce()
   })
 
+  it('converts without Windows touching the UNC path, which WSL refuses for drive folders', async () => {
+    const deniedOnUnc = (path: string): void => {
+      if (path.startsWith('\\\\')) {
+        throw Object.assign(new Error(`EPERM: operation not permitted, '${path}'`), {
+          code: 'EPERM'
+        })
+      }
+    }
+    const run = deps({
+      runWindowsGit: vi.fn(async (args: string[], cwd: string) => {
+        deniedOnUnc(cwd)
+        return args[0] === 'rev-parse' ? '.git\n' : 'git version 2.47'
+      }),
+      readWorktreeLinks: vi.fn(async (commonDir: string) => {
+        deniedOnUnc(commonDir)
+        return []
+      })
+    })
+    expect(await startWslDriveUncConversion(run, REQUEST)).toEqual({
+      outcome: 'restarting',
+      migrationId: 'conv-1'
+    })
+  })
+
   it('refuses worktrees WSL Git made, before pausing anything', async () => {
     const run = deps({ readWorktreeLinks: vi.fn(async () => ['/mnt/c/src/feature/.git']) })
     expect(await startWslDriveUncConversion(run, REQUEST)).toEqual({
