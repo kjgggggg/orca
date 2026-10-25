@@ -37,7 +37,7 @@ vi.mock('../../observability/instrumentation', () => ({
 }))
 
 import { gitExecFileAsync, gitExecFileAsyncBuffer } from './git-exec-file'
-import { withGitAdmission } from './git-spawn'
+import { gitSpawnAfterWindowsEnvironmentReady, withGitAdmission } from './git-spawn'
 import { gitStreamStdout } from './git-stream-stdout'
 import {
   GitAdmissionScheduler,
@@ -115,6 +115,7 @@ describe('git admission span coverage', () => {
     await expect(pending).resolves.toEqual({ stdout: 'ok', stderr: '' })
     expect(span.setAttribute).toHaveBeenCalledWith('git.queue_wait_ms', 37)
     expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
+    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
     expect(span.end).toHaveBeenCalledOnce()
   })
 
@@ -137,6 +138,7 @@ describe('git admission span coverage', () => {
     await expect(pending).resolves.toEqual({ stdout: Buffer.from('blob') })
     expect(span.setAttribute).toHaveBeenCalledWith('git.queue_wait_ms', 37)
     expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
+    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
     expect(span.end).toHaveBeenCalledOnce()
   })
 
@@ -151,6 +153,7 @@ describe('git admission span coverage', () => {
     child.emit('close', 0, null)
     await expect(pending).resolves.toEqual({ stoppedEarly: false })
     expect(span.setAttribute).toHaveBeenCalledWith('git.queue_wait_ms', 37)
+    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
     expect(span.end).toHaveBeenCalledOnce()
   })
 
@@ -162,9 +165,20 @@ describe('git admission span coverage', () => {
     await expect(pending).resolves.toBe(child)
 
     expect(span.setAttribute).toHaveBeenCalledWith('git.queue_wait_ms', 37)
+    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
     expect(span.end).not.toHaveBeenCalled()
     child.emit('close', 0, null)
     expect(span.end).toHaveBeenCalledOnce()
     expect(span.fail).not.toHaveBeenCalled()
+  })
+
+  it('names which Git ran on the span of a spawn after the Windows environment is ready', async () => {
+    const child = mockChild()
+    spawnMock.mockReturnValue(child)
+    await expect(gitSpawnAfterWindowsEnvironmentReady(['status'], { cwd: '/repo' })).resolves.toBe(
+      child
+    )
+    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
+    child.emit('close', 0, null)
   })
 })

@@ -11,6 +11,7 @@ import { acquireGitAdmission } from './git-subprocess-admission'
 import { classifyGitCommand } from '../../../shared/git-command-classification'
 import { buildNetworkSshPolicyEnv } from './git-ssh-policy-env'
 import { admitWslGit, noteWslGitFailure, routeLocalGitOptions } from './local-git-runtime-route'
+import { gitRunsIn } from './git-runs-in'
 
 export type GitSpawnOptions = SpawnOptions & {
   cwd: string
@@ -71,6 +72,16 @@ export async function withGitAdmission(
       signal: options.signal
     })
     span.setAttribute('git.queue_wait_ms', grant.queueWaitMs)
+    // The same resolution gitSpawn makes, for the span only.
+    span.setAttribute(
+      'git.runs_in',
+      gitRunsIn(
+        resolveGitCommand(args, {
+          cwd: options.cwd,
+          ...(options.wslDistro ? { wslDistro: options.wslDistro } : {})
+        })
+      )
+    )
     if (options.signal?.aborted) {
       grant.release()
       span.fail(createAbortError())

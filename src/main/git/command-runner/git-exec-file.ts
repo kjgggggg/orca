@@ -27,6 +27,7 @@ import { readCapturedGitBuffer, readCapturedGitString } from './captured-git-out
 import { runUnlessGitCwdKnownMissing } from './missing-git-spawn-cwd'
 import { trackGitWorktreeMutation } from '../git-worktree-mutation-state'
 import { routeLocalGitOptions, runAdmittedWslGit } from './local-git-runtime-route'
+import { gitRunsIn } from './git-runs-in'
 
 async function gitExecFileAsyncUnlocked(
   args: string[],
@@ -77,7 +78,7 @@ async function gitExecFileAsyncUnlocked(
           })
       span?.setAttribute('git.queue_wait_ms', grant.queueWaitMs)
       // Which Git ran: a project's runtime can route it into a distro whatever its cwd.
-      span?.setAttribute('git.runs_in', resolved.wsl ? `wsl:${resolved.wsl.distro}` : 'host')
+      span?.setAttribute('git.runs_in', gitRunsIn(resolved))
       const timeoutMs = gitCommandTimeoutMs(args, options.timeout, options.timeoutMsForTest)
       const capture = (
         command: ResolvedCommand
@@ -244,7 +245,7 @@ async function gitExecFileAsyncBufferInSpan(
       signal: options.signal
     })
     span?.setAttribute('git.queue_wait_ms', grant.queueWaitMs)
-    span?.setAttribute('git.runs_in', resolved.wsl ? `wsl:${resolved.wsl.distro}` : 'host')
+    span?.setAttribute('git.runs_in', gitRunsIn(resolved))
     const timeoutMs = gitCommandTimeoutMs(args, options.timeout, options.timeoutMsForTest)
     let termination: Promise<void> | null = null
     try {

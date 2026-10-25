@@ -89,4 +89,14 @@ describe('local Git runtime routing guard', () => {
     expect(sync).not.toContain('routeLocalGitOptions')
     expect(sync).toContain('hostGit: HostGitOnly')
   })
+
+  it('names which Git ran on every runner span', () => {
+    for (const file of ENTRY_FILES) {
+      const source = readFileSync(join(RUNNER_DIR, file), 'utf8')
+      const spans = source.match(/\b(withGitSpan|startGitSpan)\(/g) ?? []
+      const runsIn = source.match(/'git\.runs_in'/g) ?? []
+      expect(spans.length, file).toBeGreaterThan(0)
+      expect(runsIn.length, file).toBe(spans.length)
+    }
+  })
 })
