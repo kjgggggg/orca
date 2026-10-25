@@ -10,17 +10,21 @@ import type { GitAdmissionTier } from './git-exec-options'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { classifyGitCommand } from '../../../shared/git-command-classification'
 import { buildNetworkSshPolicyEnv } from './git-ssh-policy-env'
+import { routeLocalGitOptions } from './local-git-runtime-route'
 
 export type GitSpawnOptions = SpawnOptions & {
   cwd: string
   wslDistro?: string
+  /** Runs the host's Git even in a WSL-runtime project (local-git-runtime-route.ts); say why. */
+  hostGit?: true
   admissionTier?: GitAdmissionTier
 }
 
 export async function gitSpawnAfterWindowsEnvironmentReady(
   args: string[],
-  options: GitSpawnOptions
+  callerOptions: GitSpawnOptions
 ): Promise<ChildProcess> {
+  const options = routeLocalGitOptions(callerOptions)
   if (options.signal?.aborted) {
     throw createAbortError()
   }
@@ -50,9 +54,11 @@ export async function gitSpawnAfterWindowsEnvironmentReady(
 
 export async function withGitAdmission(
   args: string[],
-  options: GitSpawnOptions,
-  spawnChild: () => ChildProcess = () => gitSpawn(args, options)
+  callerOptions: GitSpawnOptions,
+  spawnChild?: () => ChildProcess
 ): Promise<ChildProcess> {
+  const options = routeLocalGitOptions(callerOptions)
+  const spawnRouted = spawnChild ?? (() => gitSpawn(args, options))
   const span = startGitSpan({ args, cwd: options.cwd })
   let grant: Awaited<ReturnType<typeof acquireGitAdmission>> | null = null
   try {
@@ -69,7 +75,7 @@ export async function withGitAdmission(
       span.fail(createAbortError())
       throw createAbortError()
     }
-    const child = spawnChild()
+    const child = spawnRouted()
     let finalized = false
     let liveError: Error | null = null
     const finalize = (error?: Error): void => {
@@ -111,8 +117,9 @@ export async function withGitAdmission(
   }
 }
 
-export function gitSpawn(args: string[], options: GitSpawnOptions): ChildProcess {
-  const { wslDistro, admissionTier: _admissionTier, ...spawnOptions } = options
+export function gitSpawn(args: string[], callerOptions: GitSpawnOptions): ChildProcess {
+  const options = routeLocalGitOptions(callerOptions)
+  const { wslDistro, admissionTier: _admissionTier, hostGit: _hostGit, ...spawnOptions } = options
   const resolved = resolveGitCommand(args, {
     cwd: options.cwd,
     ...(wslDistro ? { wslDistro } : {}),

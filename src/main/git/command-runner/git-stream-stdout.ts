@@ -24,6 +24,7 @@ import { nonInteractiveGitEnv, untranslatedGitOutputEnv } from './git-process-en
 import { gitSpawn } from './git-spawn'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { GitCommandTimeoutError, gitCommandTimeoutMs } from './git-command-timeout'
+import { routeLocalGitOptions } from './local-git-runtime-route'
 
 /** Result of a streamed git command; `stoppedEarly` is true when onStdout asked to stop before the child exited. */
 export type GitStreamResult = { stoppedEarly: boolean }
@@ -32,6 +33,8 @@ export type GitStreamOptions = {
   cwd: string
   env?: NodeJS.ProcessEnv
   wslDistro?: string
+  /** Runs the host's Git even in a WSL-runtime project (local-git-runtime-route.ts); say why. */
+  hostGit?: true
   preferWslDirectGit?: boolean
   signal?: AbortSignal
   /** Byte backstop; defaults to DEFAULT_GIT_MAX_BUFFER. */
@@ -48,8 +51,9 @@ export type GitStreamOptions = {
 /** Stream bounded stdout so large repositories cannot overflow V8 and parsers can stop early. */
 export async function gitStreamStdout(
   args: string[],
-  options: GitStreamOptions
+  callerOptions: GitStreamOptions
 ): Promise<GitStreamResult> {
+  const options = routeLocalGitOptions(callerOptions)
   const maxBuffer = options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER
   const timeoutMs = gitCommandTimeoutMs(args, options.timeoutMs, options.timeoutMsForTest)
   return withGitSpan({ args, cwd: options.cwd }, async (span) => {
