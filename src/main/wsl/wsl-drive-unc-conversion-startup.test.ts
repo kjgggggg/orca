@@ -231,13 +231,17 @@ describe('runWslDriveUncConversionsAtStartup', () => {
 
   it('rolls back, changing nothing, when the profile cannot be re-keyed', () => {
     const state = profileState()
-    // The drive id is already taken: converting would merge two worktrees' rows.
-    state.worktreeMeta[NEW_ID] = state.worktreeMeta[OLD_ID]
+    // The drive id already holds different user data: merging would lose one of them.
+    state.worktreeMeta[NEW_ID] = { ...state.worktreeMeta[OLD_ID], displayName: 'other' }
     seedProfile(state)
     seedOutside()
     journal()
     expect(run()).toEqual([
-      { migrationId: 'conv-1', outcome: 'rolled-back', detail: 'wsl_drive_unc_key_collision' }
+      {
+        migrationId: 'conv-1',
+        outcome: 'rolled-back',
+        detail: `wsl_drive_unc_key_collision: ${NEW_ID}`
+      }
     ])
     expect(readProfile().repos[0].path).toBe(UNC)
     expect(existsSync(join(root, 'terminal-history', getHistorySessionDirName(OLD_SESSION)))).toBe(
