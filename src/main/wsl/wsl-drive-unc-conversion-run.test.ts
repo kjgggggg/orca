@@ -111,6 +111,68 @@ describe('startWslDriveUncConversion', () => {
     })
   })
 
+  it('converts the seeded shape: a saved UNC worktree beside the drive row discovery wrote', async () => {
+    const seeded = (driveName: string): PersistedState => {
+      const value = state()
+      const savedId = `repo-a::${UNC}`
+      const discoveredId = `repo-a::${DRIVE}`
+      const row = (instanceId: string, displayName: string) => ({
+        instanceId,
+        displayName,
+        comment: '',
+        linkedIssue: null,
+        linkedPR: null,
+        linkedLinearIssue: null,
+        isArchived: false,
+        isUnread: false,
+        isPinned: false,
+        sortOrder: 1,
+        lastActivityAt: 0,
+        hostId: 'local' as const
+      })
+      value.worktreeMeta = {
+        [savedId]: { ...row('saved', 'app'), projectId: 'repo:repo-a' },
+        [discoveredId]: row('discovered', driveName)
+      }
+      value.worktreeIdentityAliases = {
+        [`local|${savedId}`]: ['wt2:local:saved'],
+        [`local|${discoveredId}`]: ['wt2:local:discovered']
+      }
+      value.workspaceSession.tabsByWorktree = {
+        [savedId]: [
+          {
+            id: 'tab-1',
+            ptyId: 'pty-1',
+            worktreeId: savedId,
+            title: 'claude',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 0
+          }
+        ]
+      }
+      return value
+    }
+    const differing = deps({ readProfileState: async () => seeded('renamed on C:') })
+    expect(await startWslDriveUncConversion(differing, REQUEST)).toEqual({
+      outcome: 'refused',
+      blockers: [
+        {
+          kind: 'state-conflict',
+          detail: `wsl_drive_unc_key_collision: repo-a::${DRIVE}`,
+          cause: 'differing-saved-data',
+          key: `repo-a::${DRIVE}`
+        }
+      ]
+    })
+    const run = deps({ readProfileState: async () => seeded('') })
+    expect(await startWslDriveUncConversion(run, REQUEST)).toEqual({
+      outcome: 'restarting',
+      migrationId: 'conv-1'
+    })
+  })
+
   it('refuses worktrees WSL Git made, before pausing anything', async () => {
     const run = deps({ readWorktreeLinks: vi.fn(async () => ['/mnt/c/src/feature/.git']) })
     expect(await startWslDriveUncConversion(run, REQUEST)).toEqual({

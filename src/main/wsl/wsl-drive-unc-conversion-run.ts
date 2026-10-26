@@ -23,6 +23,7 @@ import {
   wslAuthoredWorktreePaths,
   type WslDriveProjectDeps
 } from './wsl-drive-project-windows-git'
+import { WslDriveUncKeyCollisionError } from './wsl-drive-unc-identity-rewrite'
 import { collectWslDriveUncScope, wslUncDrivePathToWindows } from './wsl-drive-unc-project-scope'
 import { rewriteWslDriveUncState } from './wsl-drive-unc-state-rewrite'
 
@@ -60,7 +61,7 @@ export async function startWslDriveUncConversion(
       folderWorkspaceIds
     }))
   } catch (error) {
-    return refused([{ kind: 'state-conflict', detail: describe(error) }])
+    return refused([stateConflict(error)])
   }
   const repos = state.repos.filter((repo) => repoIds.includes(repo.id))
   const gitBlockers = await windowsGitBlockers(deps, repos, request.distro)
@@ -158,6 +159,16 @@ async function windowsGitBlockers(
 
 function refused(blockers: WslDriveUncConversionBlocker[]): WslDriveUncConversionResult {
   return { outcome: 'refused', blockers }
+}
+
+function stateConflict(error: unknown): WslDriveUncConversionBlocker {
+  const detail = describe(error)
+  if (error instanceof WslDriveUncKeyCollisionError) {
+    return { kind: 'state-conflict', detail, cause: 'differing-saved-data', key: error.key }
+  }
+  return detail === 'wsl_drive_unc_project_split'
+    ? { kind: 'state-conflict', detail, cause: 'project-split' }
+    : { kind: 'state-conflict', detail }
 }
 
 function describe(error: unknown): string {

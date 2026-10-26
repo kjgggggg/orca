@@ -25,8 +25,15 @@ export type WslDriveUncConversionBlocker =
   | { kind: 'windows-git-missing' }
   /** WSL Git made these worktrees; their links are Linux paths Windows Git can't follow. */
   | { kind: 'wsl-authored-worktrees'; repoId: string; paths: string[] }
-  /** Its saved state can't be re-keyed: a project also holds an unconverted repo, or ids collide. */
-  | { kind: 'state-conflict'; detail: string }
+  /** Its saved state can't be re-keyed; `cause` is optional for older hosts. */
+  | {
+      kind: 'state-conflict'
+      detail: string
+      /** A project also holds an unconverted repo, or a drive key already holds different data. */
+      cause?: 'project-split' | 'differing-saved-data'
+      /** The key whose UNC and drive entries differ. */
+      key?: string
+    }
 
 export type WslDriveUncConversionResult =
   /** Journaled with the panes asleep; the app restarts and converts before the window opens. */
