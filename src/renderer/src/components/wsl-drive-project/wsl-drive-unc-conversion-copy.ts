@@ -41,6 +41,19 @@ function blockerMessage(blocker: WslDriveUncConversionBlocker, drivePath: string
     case 'wsl-authored-worktrees':
       return wslDriveProjectBlockerMessage(blocker)
     case 'state-conflict':
+      if (blocker.cause === 'differing-saved-data') {
+        return translate(
+          'wslDriveUnc.blocker.differingState',
+          'Orca saved different details for this folder under both its WSL path and {{drivePath}}, so nothing changed.',
+          { drivePath }
+        )
+      }
+      if (blocker.cause === 'project-split') {
+        return translate(
+          'wslDriveUnc.blocker.projectSplit',
+          'This project also holds a repository that isn’t converting, so nothing changed.'
+        )
+      }
       return translate(
         'wslDriveUnc.blocker.state',
         'Orca found saved state for this project it can’t convert safely, so nothing changed.'

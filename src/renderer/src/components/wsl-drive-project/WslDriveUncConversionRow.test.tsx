@@ -38,4 +38,18 @@ describe('WslDriveUncConversionRow', () => {
       wslDriveUncConversionMessages({ outcome: 'terminals-blocked', blockers: [] }, 'C:\\x')[0]
     ).toContain('busy')
   })
+
+  it('names why saved state blocks the conversion', () => {
+    const conflict = (cause?: 'project-split' | 'differing-saved-data') =>
+      wslDriveUncConversionMessages(
+        {
+          outcome: 'refused',
+          blockers: [{ kind: 'state-conflict', detail: 'x', ...(cause ? { cause } : {}) }]
+        },
+        String.raw`C:\src\app`
+      )[0]
+    expect(conflict('differing-saved-data')).toContain(String.raw`its WSL path and C:\src\app`)
+    expect(conflict('project-split')).toContain('isn’t converting')
+    expect(conflict()).toContain('can’t convert safely')
+  })
 })
