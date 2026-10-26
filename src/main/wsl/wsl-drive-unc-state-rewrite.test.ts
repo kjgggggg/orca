@@ -10,6 +10,7 @@ import {
   type WslMoverPaths
 } from '../persistence/__fixtures__/wsl-mover/wsl-mover-profile-rows'
 import type { WslMoveProjectionInput } from '../persistence/moving-wsl-projects/wsl-move-state-projection'
+import { WslDriveUncKeyCollisionError } from './wsl-drive-unc-identity-rewrite'
 import { rewriteWslDriveUncState } from './wsl-drive-unc-state-rewrite'
 
 // Each fixture's Linux paths, put under the C: drive: as the distro sees it, then as Windows does.
@@ -146,12 +147,68 @@ describe('rewriteWslDriveUncState', () => {
     expect(() => convert(before, ['repo-a'])).toThrow('wsl_drive_unc_project_split')
   })
 
-  it('refuses when a converted key would land on one already there', () => {
+  it('refuses when a converted key lands on one with different user data, naming the key', () => {
     const before = persisted(heavyWslMoverProfile(unc))
     const oldId = `repo-a::${unc.at('/home/dev/app')}`
     const newId = `repo-a::${drive.at('/home/dev/app')}`
+    before.worktreeMeta[newId] = { ...before.worktreeMeta[oldId], displayName: 'other' }
+    expect(() => convert(before, ['repo-a', 'repo-b'])).toThrow(
+      new WslDriveUncKeyCollisionError(newId)
+    )
+  })
+
+  it('merges a drive key that holds nothing, or the same data, into the converted one', () => {
+    const before = persisted(heavyWslMoverProfile(unc))
+    const oldId = `repo-a::${unc.at('/home/dev/app')}`
+    const newId = `repo-a::${drive.at('/home/dev/app')}`
+    before.workspaceSession.tabsByWorktree[newId] = []
     before.worktreeMeta[newId] = before.worktreeMeta[oldId]
-    expect(() => convert(before, ['repo-a', 'repo-b'])).toThrow('wsl_drive_unc_key_collision')
+    const { state } = convert(before, ['repo-a', 'repo-b'])
+    expect(state.workspaceSession.tabsByWorktree[newId]).toEqual(
+      convert(persisted(heavyWslMoverProfile(unc)), ['repo-a', 'repo-b']).state.workspaceSession
+        .tabsByWorktree[newId]
+    )
+    expect(state.worktreeMeta[newId]?.displayName).toBe('app')
+  })
+
+  it('drops the drive-keyed row startup discovery wrote for the saved UNC worktree', () => {
+    // Seeded shape: WSL Git lists the UNC project's folder as C:\, so discovery wrote a bare row.
+    const before = persisted(heavyWslMoverProfile(unc))
+    const oldId = `repo-a::${unc.at('/home/dev/app')}`
+    const newId = `repo-a::${drive.at('/home/dev/app')}`
+    before.worktreeMeta[oldId] = { ...before.worktreeMeta[oldId], instanceId: 'saved' }
+    before.worktreeMeta[newId] = {
+      instanceId: 'discovered',
+      displayName: '',
+      comment: '',
+      linkedIssue: null,
+      linkedPR: null,
+      linkedLinearIssue: null,
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 2,
+      lastActivityAt: 0,
+      workspaceStatus: 'in-progress',
+      hostId: 'local'
+    }
+    before.worktreeIdentityAliases = {
+      [`local|${oldId}`]: ['wt2:local:saved'],
+      [`local|${newId}`]: ['wt2:local:discovered']
+    }
+    before.worktreeMetaByIdentity = { 'wt2:local:discovered': before.worktreeMeta[newId] }
+    const { state } = convert(before, ['repo-a', 'repo-b'])
+    expect(state.worktreeMeta[newId]).toMatchObject({
+      instanceId: 'saved',
+      displayName: 'app',
+      priorWorktreeIds: [oldId]
+    })
+    expect(state.worktreeMeta[oldId]).toBeUndefined()
+    expect(state.worktreeIdentityAliases).toEqual({ [`local|${newId}`]: ['wt2:local:saved'] })
+    expect(state.worktreeMetaByIdentity).toEqual({})
+    expect(state.workspaceSession.tabsByWorktree[newId]).toEqual([
+      expect.objectContaining({ id: 'tab-1', worktreeId: newId })
+    ])
   })
 
   it('maps a bare path only inside a converted folder', () => {

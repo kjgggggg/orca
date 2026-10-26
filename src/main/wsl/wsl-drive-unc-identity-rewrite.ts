@@ -4,6 +4,7 @@
  * the same folder's drive path (`C:\x`). Worktree ids, owner keys, PTY session ids and editor file
  * ids are rebuilt by the export's composite rewriters; user text is never touched.
  */
+import { isDeepStrictEqual } from 'node:util'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../shared/execution-host'
 import { PTY_SESSION_ID_SEPARATOR } from '../../shared/pty-session-id-format'
@@ -138,10 +139,18 @@ export function createWslDriveUncRewriter(scope: WslDriveUncRewriteScope): WslDr
   return { identity }
 }
 
+/** Two keys of one record that both carry data, and differ, after the re-key. */
+export class WslDriveUncKeyCollisionError extends Error {
+  constructor(readonly key: string) {
+    super(`wsl_drive_unc_key_collision: ${key}`)
+    this.name = 'WslDriveUncKeyCollisionError'
+  }
+}
+
 /**
  * `value` with every identity string and record key passed through `rewriter`, skipping user text
- * and the verbatim keys; unchanged subtrees keep their reference. Throws when two keys of one
- * record would become the same key.
+ * and the verbatim keys; unchanged subtrees keep their reference. Two keys that become one merge
+ * when either is empty or both match; otherwise throws WslDriveUncKeyCollisionError.
  */
 export function rewriteWslDriveUncValue<T>(value: T, rewriter: WslDriveUncRewriter): T {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: rewriteNode maps strings to strings and rebuilds arrays and records in place, so the shape of T is kept.
@@ -168,20 +177,53 @@ function rewriteNode(value: unknown, map: (value: string) => string, skip: boole
     return value
   }
   let changed = false
-  const entries: [string, unknown][] = []
-  const seen = new Set<string>()
+  const entries = new Map<string, { child: unknown; rekeyed: boolean }>()
   for (const [key, child] of Object.entries(value)) {
     const verbatim = WSL_MOVE_FREE_TEXT_KEYS.has(key) || VERBATIM_KEYS.has(key)
     const nextKey = map(key)
     const nextChild = rewriteNode(child, map, verbatim)
-    if (seen.has(nextKey)) {
-      throw new Error('wsl_drive_unc_key_collision')
-    }
-    seen.add(nextKey)
     changed ||= nextKey !== key || nextChild !== child
-    entries.push([nextKey, nextChild])
+    const rekeyed = nextKey !== key
+    const other = entries.get(nextKey)
+    entries.set(
+      nextKey,
+      other
+        ? merged(nextKey, other, { child: nextChild, rekeyed })
+        : {
+            child: nextChild,
+            rekeyed
+          }
+    )
   }
-  return changed ? Object.fromEntries(entries) : value
+  return changed
+    ? Object.fromEntries([...entries].map(([key, entry]) => [key, entry.child]))
+    : value
+}
+
+/** The re-keyed entry wins a tie: it is the one the user's UNC project wrote. */
+function merged(
+  key: string,
+  a: { child: unknown; rekeyed: boolean },
+  b: { child: unknown; rekeyed: boolean }
+): { child: unknown; rekeyed: boolean } {
+  const [converted, existing] = b.rekeyed && !a.rekeyed ? [b, a] : [a, b]
+  if (isEmptyValue(existing.child) || isDeepStrictEqual(existing.child, converted.child)) {
+    return converted
+  }
+  if (isEmptyValue(converted.child)) {
+    return existing
+  }
+  throw new WslDriveUncKeyCollisionError(key)
+}
+
+function isEmptyValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0
+  }
+  return typeof value === 'object' && Object.keys(value).length === 0
 }
 
 function safeDecode(value: string): string | null {

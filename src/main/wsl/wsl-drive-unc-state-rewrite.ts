@@ -18,6 +18,7 @@ import { PTY_SESSION_ID_SEPARATOR } from '../../shared/pty-session-id-format'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { WSL_DRIVE_UNC_STATE_DISPOSITIONS } from '../../shared/wsl-drive-unc-state-dispositions'
 import { wslMoveRepoPaths } from '../persistence/moving-wsl-projects/wsl-move-scope'
+import { withoutDiscoveryShadows } from './wsl-drive-unc-discovery-shadows'
 import { wslUncDrivePathToWindows } from './wsl-drive-unc-project-scope'
 import {
   createWslDriveUncRewriter,
@@ -39,14 +40,14 @@ export type WslDriveUncStateRewrite = {
 
 /** Unchanged fields keep their reference, so only the domains that changed are written. */
 export function rewriteWslDriveUncState(
-  state: PersistedState,
+  saved: PersistedState,
   scope: WslDriveUncStateScope
 ): WslDriveUncStateRewrite {
   const repoIds = new Set(scope.repoIds)
   const folderWorkspaceIds = new Set(scope.folderWorkspaceIds)
   const roots = [
-    ...state.repos.filter((repo) => repoIds.has(repo.id)).flatMap(wslMoveRepoPaths),
-    ...state.folderWorkspaces
+    ...saved.repos.filter((repo) => repoIds.has(repo.id)).flatMap(wslMoveRepoPaths),
+    ...saved.folderWorkspaces
       .filter((folder) => folderWorkspaceIds.has(folder.id))
       .map((folder) => folder.folderPath)
   ]
@@ -56,7 +57,8 @@ export function rewriteWslDriveUncState(
     folderWorkspaceIds,
     roots
   })
-  const worktreeIds = collectRewrittenWorktreeIds(state, ids)
+  const worktreeIds = collectRewrittenWorktreeIds(saved, ids)
+  const state = withoutDiscoveryShadows(saved, worktreeIds)
   // A worktree outside the repo's own folders is still the project's.
   const rewriter = createWslDriveUncRewriter({
     distro: scope.distro,
