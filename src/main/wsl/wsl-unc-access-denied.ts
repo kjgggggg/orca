@@ -5,13 +5,15 @@
  */
 import { readdir } from 'node:fs/promises'
 import { parseWslUncPath } from '../../shared/wsl-paths'
+import { wslHostsGateOpen } from './wsl-host-gate'
 
 /** The message to show instead of "not a git repository"; null when access wasn't the problem. */
 export async function describeWslUncAccessDenied(
   path: string,
   list: (path: string) => Promise<unknown> = readdir
 ): Promise<string | null> {
-  if (!parseWslUncPath(path)) {
+  // Gated: the renderer offers "add as folder" only on the usual "not a git repository" text.
+  if (process.platform !== 'win32' || !wslHostsGateOpen() || !parseWslUncPath(path)) {
     return null
   }
   try {
