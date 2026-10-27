@@ -121,6 +121,9 @@ export function runAdmittedWslGit<T>(
   options: RoutableGitOptions & { admissionTier?: GitAdmissionTier },
   run: () => Promise<T>
 ): Promise<T> {
+  if (!router) {
+    return run()
+  }
   const admission = admitWslGit(options)
   const started = admission ? admission.then(run) : run()
   return started.catch((error: unknown) => {

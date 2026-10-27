@@ -10,7 +10,12 @@ import type { GitAdmissionTier } from './git-exec-options'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { classifyGitCommand } from '../../../shared/git-command-classification'
 import { buildNetworkSshPolicyEnv } from './git-ssh-policy-env'
-import { admitWslGit, noteWslGitFailure, routeLocalGitOptions } from './local-git-runtime-route'
+import {
+  admitWslGit,
+  isLocalGitRuntimeRouterInstalled,
+  noteWslGitFailure,
+  routeLocalGitOptions
+} from './local-git-runtime-route'
 import { gitRunsIn } from './git-runs-in'
 
 export type GitSpawnOptions = SpawnOptions & {
@@ -98,7 +103,7 @@ export async function withGitAdmission(
     const keepStderr = (chunk: Buffer | string): void => {
       stderrTail = `${stderrTail}${String(chunk)}`.slice(-2_048)
     }
-    if (options.wslDistro) {
+    if (options.wslDistro && isLocalGitRuntimeRouterInstalled()) {
       child.stderr?.on('data', keepStderr)
     }
     const finalize = (error?: Error): void => {

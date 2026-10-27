@@ -6,6 +6,7 @@ import type { RepoHostTarget } from '../shared/repo-host-identity'
 import { repoTarget } from './persistence/repo-host-target-matcher.test-fixture'
 import { type GitRemoteIdentityProbe, probeGitRemoteIdentity } from './repo-git-remote-identity'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../shared/wsl-host-internal-gate'
+import { setLocalGitRuntimeRouter } from './git/command-runner/local-git-runtime-route'
 import {
   enrichMissingRepoGitRemoteIdentities,
   flushRepoGitRemoteIdentityEnrichmentForTests,
@@ -158,6 +159,22 @@ describe('enrichMissingRepoGitRemoteIdentities', () => {
 
     expect(probeGitRemoteIdentity).toHaveBeenCalledWith(repo.path, 'local', expect.any(Object))
     expect(vi.mocked(probeGitRemoteIdentity).mock.calls[0]?.[2]?.wslDistro).toBe(distro)
+    await flushRepoGitRemoteIdentityEnrichmentForTests()
+  })
+
+  it.each([
+    ['keeps its tier without the Git router', null, undefined],
+    ['waits as background work with the Git router on', () => undefined, 'background']
+  ])('sweeps a local repo: %s', async (_case, router, tier) => {
+    vi.mocked(probeGitRemoteIdentity).mockResolvedValue(resolvedProbe)
+    setLocalGitRuntimeRouter(router)
+    try {
+      enrichMissingRepoGitRemoteIdentities(makeStore(makeRepo()))
+    } finally {
+      setLocalGitRuntimeRouter(null)
+    }
+
+    expect(vi.mocked(probeGitRemoteIdentity).mock.calls[0]?.[2]?.admissionTier).toBe(tier)
     await flushRepoGitRemoteIdentityEnrichmentForTests()
   })
 
