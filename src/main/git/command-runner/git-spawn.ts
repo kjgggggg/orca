@@ -60,7 +60,10 @@ export async function withGitAdmission(
 ): Promise<ChildProcess> {
   const options = routeLocalGitOptions(callerOptions)
   const spawnRouted = spawnChild ?? (() => gitSpawn(args, options))
-  await admitWslGit(options)
+  const admission = admitWslGit(options)
+  if (admission) {
+    await admission
+  }
   const span = startGitSpan({ args, cwd: options.cwd })
   let grant: Awaited<ReturnType<typeof acquireGitAdmission>> | null = null
   try {
