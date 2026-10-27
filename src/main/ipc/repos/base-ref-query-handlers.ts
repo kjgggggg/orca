@@ -13,7 +13,7 @@ import {
   type ExecutionHostId
 } from '../../../shared/execution-host'
 import { getBaseRefDefault, getRemoteCount, searchBaseRefDetails } from '../../git/repo'
-import { getWorktreeCreatePrefetchGitOptions } from '../../project-runtime-git-options'
+import { getProjectRuntimeReadGitOptions } from '../../project-runtime-git-options'
 
 export function registerBaseRefQueryHandlers(store: Store): void {
   ipcMain.handle(
@@ -32,7 +32,7 @@ export function registerBaseRefQueryHandlers(store: Store): void {
         return { defaultBaseRef: null, remoteCount: 0 }
       }
       // Where the project's runtime runs Git; a runtime needing repair reads with host Git.
-      const git = getWorktreeCreatePrefetchGitOptions(store, repo)
+      const git = getProjectRuntimeReadGitOptions(store, repo)
       const [defaultBaseRef, remoteCount] = await Promise.all([
         getBaseRefDefault(repo.path, git),
         getRemoteCount(repo.path, git)
@@ -84,7 +84,7 @@ async function searchBaseRefDetailsForRepo(
     args.query,
     limit,
     true,
-    getWorktreeCreatePrefetchGitOptions(store, repo)
+    getProjectRuntimeReadGitOptions(store, repo)
   )
 }
 

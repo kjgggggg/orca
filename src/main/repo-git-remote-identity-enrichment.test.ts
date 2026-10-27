@@ -5,6 +5,7 @@ import type { Repo } from '../shared/repo-types'
 import type { RepoHostTarget } from '../shared/repo-host-identity'
 import { repoTarget } from './persistence/repo-host-target-matcher.test-fixture'
 import { type GitRemoteIdentityProbe, probeGitRemoteIdentity } from './repo-git-remote-identity'
+import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../shared/wsl-host-internal-gate'
 import {
   enrichMissingRepoGitRemoteIdentities,
   flushRepoGitRemoteIdentityEnrichmentForTests,
@@ -123,7 +124,11 @@ describe('enrichMissingRepoGitRemoteIdentities', () => {
     expect(onChanged).toHaveBeenCalledTimes(1)
   })
 
-  it('probes a drive project whose runtime is WSL with the distro Git', async () => {
+  it.each([
+    ['with the distro Git', '1', 'Ubuntu'],
+    ['with host Git, as before, while WSL hosts are off', '', undefined]
+  ])('probes a drive project whose runtime is WSL %s', async (_case, gate, distro) => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, gate)
     vi.mocked(probeGitRemoteIdentity).mockResolvedValue(resolvedProbe)
     const repo = makeRepo({ path: String.raw`C:\src\app` })
     const store = {
@@ -148,13 +153,11 @@ describe('enrichMissingRepoGitRemoteIdentities', () => {
       enrichMissingRepoGitRemoteIdentities(store)
     } finally {
       Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+      vi.unstubAllEnvs()
     }
 
-    expect(probeGitRemoteIdentity).toHaveBeenCalledWith(
-      repo.path,
-      'local',
-      expect.objectContaining({ wslDistro: 'Ubuntu' })
-    )
+    expect(probeGitRemoteIdentity).toHaveBeenCalledWith(repo.path, 'local', expect.any(Object))
+    expect(vi.mocked(probeGitRemoteIdentity).mock.calls[0]?.[2]?.wslDistro).toBe(distro)
     await flushRepoGitRemoteIdentityEnrichmentForTests()
   })
 

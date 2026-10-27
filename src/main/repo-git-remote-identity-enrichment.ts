@@ -11,7 +11,7 @@ import { isUnresolvedSshHostAlias } from '../shared/git-remote-host-alias'
 import { getProjectProviderIdentity } from '../shared/project-host-setup-projection'
 import { getStoredRepoExecutionHostId } from './repo-execution-host'
 import { probeGitRemoteIdentity } from './repo-git-remote-identity'
-import { getWorktreeCreatePrefetchGitOptions } from './project-runtime-git-options'
+import { getProjectRuntimeReadGitOptions } from './project-runtime-git-options'
 import type { ProjectRuntimeResolutionStore } from './local-project-runtime-resolution'
 import { isWslMoveRepoBlocked } from './persistence/moving-wsl-projects/wsl-move-background-backoff'
 import { blockedWslDistroForPath, wslDistroForPath } from './wsl/wsl-unc-access-gate'
@@ -170,7 +170,7 @@ async function enrichRepoGitRemoteIdentity(store: RepoIdentityStore, repo: Repo)
     const result = await probeGitRemoteIdentity(repo.path, hostId, {
       signal: controller.signal,
       // A local project's runtime may run its Git in a distro, whatever its path.
-      ...getWorktreeCreatePrefetchGitOptions(store, repo)
+      ...getProjectRuntimeReadGitOptions(store, repo)
     })
     // Aborted probes resolve as unavailable; prevent retired probes from re-seeding deadlines.
     if (controller.signal.aborted) {
