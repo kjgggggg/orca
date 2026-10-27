@@ -10,6 +10,7 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }))
 
 import { gitExecFileSync } from './git-exec-file-sync'
+import { untranslatedGitOutputEnv } from './git-process-env'
 import { setLocalGitRuntimeRouter } from './local-git-runtime-route'
 
 const originalPlatform = process.platform
@@ -30,5 +31,27 @@ describe('gitExecFileSync', () => {
     })
     const [binary] = execFileSync.mock.calls[0] ?? ['']
     expect(binary.toLowerCase()).not.toContain('wsl')
+  })
+
+  it('spawns exactly what it did before hostGit existed on POSIX', () => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
+    gitExecFileSync(['rev-parse', '--git-path', 'orca/setup-runner.sh'], {
+      cwd: '/test/worktree',
+      hostGit: true
+    })
+    expect(execFileSync.mock.calls).toEqual([
+      [
+        'git',
+        ['rev-parse', '--git-path', 'orca/setup-runner.sh'],
+        {
+          cwd: '/test/worktree',
+          encoding: 'utf-8',
+          env: untranslatedGitOutputEnv(),
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 15_000,
+          windowsHide: true
+        }
+      ]
+    ])
   })
 })
