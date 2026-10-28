@@ -131,7 +131,12 @@ export function collectWslDriveUncScope(
 
 /** A bare path is re-keyed by the folder it lies in, so nested projects must convert together. */
 function refuseOverlaps(scope: WslDriveUncScope, repos: readonly Repo[], distro: string): void {
-  const refusedIds = new Set(scope.refused.map((entry) => entry.id))
+  // A duplicate's folder is the project it duplicates, so it never splits a converted folder.
+  const refusedIds = new Set(
+    scope.refused
+      .filter((entry) => entry.reason !== 'duplicate-windows-project')
+      .map((entry) => entry.id)
+  )
   const comparable = (repo: Repo): string[] =>
     wslMoveRepoPaths(repo).flatMap((path) => {
       const drive = wslUncDrivePathToWindows(path, distro)
