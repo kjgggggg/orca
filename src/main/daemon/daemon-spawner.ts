@@ -119,6 +119,11 @@ export class DaemonSpawner {
   }
 }
 
+/** The daemon runtime dir of a server serving this data root. */
+export function daemonRuntimeDirFor(userDataPath: string): string {
+  return join(userDataPath, 'daemon')
+}
+
 export function getDaemonSocketPath(
   runtimeDir: string,
   protocolVersion = PROTOCOL_VERSION
