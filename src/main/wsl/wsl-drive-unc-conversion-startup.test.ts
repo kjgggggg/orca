@@ -23,7 +23,7 @@ import {
   type WslDriveUncConversionStore
 } from './wsl-drive-unc-conversion-stores'
 
-const journalWrites = vi.hoisted(() => ({ failPhase: null as string | null }))
+const journalWrites = vi.hoisted((): { failPhase: string | null } => ({ failPhase: null }))
 vi.mock('./wsl-drive-unc-conversion-journal', async (original) => {
   const actual = await original<typeof Journal>()
   return {
