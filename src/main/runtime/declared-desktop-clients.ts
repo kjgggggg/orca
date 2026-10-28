@@ -3,6 +3,8 @@ import { sanitizeDeviceLabel } from '../../shared/device-key-proof'
 import type { DeviceEntry } from './device-entry'
 
 const UNNAMED_DESKTOP = 'another Orca'
+// Lost contact isn't proof an Orca left: a closed control socket still counts while it reconnects.
+export const DECLARED_CLIENT_RECONNECT_GRACE_MS = 60_000
 
 type Declaration = { clientInstanceId: string; deviceId: string }
 
@@ -13,13 +15,30 @@ type Declaration = { clientInstanceId: string; deviceId: string }
  */
 export class DeclaredDesktopClients {
   private readonly byConnection = new Map<string, Declaration>()
+  // Installations whose last declared socket closed recently, by id, until their grace ends.
+  private readonly reconnecting = new Map<string, { deviceId: string; until: number }>()
+
+  constructor(private readonly now: () => number = Date.now) {}
 
   declare(connectionId: string, deviceId: string, clientInstanceId: string): void {
     this.byConnection.set(connectionId, { clientInstanceId, deviceId })
+    this.reconnecting.delete(clientInstanceId)
   }
 
   forget(connectionId: string): void {
+    const declaration = this.byConnection.get(connectionId)
     this.byConnection.delete(connectionId)
+    if (
+      declaration &&
+      ![...this.byConnection.values()].some(
+        (other) => other.clientInstanceId === declaration.clientInstanceId
+      )
+    ) {
+      this.reconnecting.set(declaration.clientInstanceId, {
+        deviceId: declaration.deviceId,
+        until: this.now() + DECLARED_CLIENT_RECONNECT_GRACE_MS
+      })
+    }
   }
 
   peers(
@@ -29,7 +48,20 @@ export class DeclaredDesktopClients {
     const callerInstance =
       caller.clientInstanceId ?? this.byConnection.get(caller.connectionId)?.clientInstanceId
     const names = new Map<string, string>()
-    for (const [connectionId, declaration] of this.byConnection) {
+    const now = this.now()
+    for (const [clientInstanceId, { until }] of this.reconnecting) {
+      if (until <= now) {
+        this.reconnecting.delete(clientInstanceId)
+      }
+    }
+    const candidates: [string | null, Declaration][] = [
+      ...this.byConnection,
+      ...[...this.reconnecting].map(([clientInstanceId, { deviceId }]): [null, Declaration] => [
+        null,
+        { clientInstanceId, deviceId }
+      ])
+    ]
+    for (const [connectionId, declaration] of candidates) {
       if (
         connectionId === caller.connectionId ||
         declaration.clientInstanceId === callerInstance ||

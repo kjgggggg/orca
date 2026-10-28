@@ -115,7 +115,7 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
     expect(await peerNames(startup, STABLE)).toEqual([])
   })
 
-  it('tells two desktops sharing one startup token apart, only while each control socket is open', async () => {
+  it('tells two desktops sharing one startup token apart, and keeps one through a reconnect', async () => {
     const server = await startServer()
     const startup = pair(server, 'CLI 10/28/2026', 'runtime')
     const stable = await socket(startup)
@@ -126,11 +126,12 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
     expect(await peerNames(startup, STABLE)).toEqual(['another Orca'])
     expect(await peerNames(startup, DEV)).toEqual(['another Orca'])
 
-    // Dev's control socket closes: the tag goes with it, so stable may tear down.
+    // Dev's control socket closes: lost contact isn't proof it left, so it still counts while it
+    // reconnects (the grace's expiry is unit-tested with a clock).
     const closed = waitForWsClose(dev.session.ws)
     dev.session.ws.close()
     await closed
-    await expect.poll(() => peerNames(startup, STABLE)).toEqual([])
+    expect(await peerNames(startup, STABLE)).toEqual(['another Orca'])
 
     // A reconnect declares again.
     const devAgain = await socket(startup)
