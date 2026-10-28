@@ -16,6 +16,7 @@ import { wslMoveReleasedSessionFocusPatch } from '../persistence/moving-wsl-proj
 import { applyWslMoveSessionFocus } from '../persistence/moving-wsl-projects/wsl-move-main-rewrite-stores'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
+import { wasWslHostKeptForPeers } from '../wsl/wsl-host-kept-for-peers'
 import {
   stopWslMoveHostAutomations,
   wslMoveMovedAutomationIds,
@@ -63,9 +64,12 @@ export function createWslMoveUndoPorts(
 ): WslMoveUndoPorts {
   return {
     stopHostCopies: async (move) => {
-      // A host the user removed ran its terminals down with it; nothing of the project runs there.
+      // A host the user removed ran its terminals down with it, unless its Remove kept the server
+      // running for another Orca (R39): then its copies may still run, and nothing here reaches them.
       if (!listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)) {
-        return 'stopped'
+        return wasWslHostKeptForPeers(userDataPath, move.destinationEnvironmentId)
+          ? 'unreachable'
+          : 'stopped'
       }
       const scope = wslMoveRewriteScope(wslMoveDesktopRewriteContext(userDataPath, move))
       const local = store.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID)
@@ -129,11 +133,13 @@ export function createWslMoveUndoPorts(
     stopHostAutomations: async (move) => {
       // Inside a try: a throw here would otherwise escape past undo's spawn fence.
       try {
-        // A removed host took its automations with it.
+        // A removed host took its automations with it, unless another Orca keeps its server (R39).
         if (
           !listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)
         ) {
-          return { outcome: 'stopped', restore: async () => {}, applyHere: () => () => {} }
+          return wasWslHostKeptForPeers(userDataPath, move.destinationEnvironmentId)
+            ? { outcome: 'unreachable' }
+            : { outcome: 'stopped', restore: async () => {}, applyHere: () => () => {} }
         }
         // E11: a Remove that could not prove the server stopped; the host is not to be touched.
         if (wslHostRemovalPending(userDataPath, move.manifest.source.distro)) {
