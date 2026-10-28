@@ -211,6 +211,32 @@ describe('rewriteWslDriveUncState', () => {
     ])
   })
 
+  it('keeps a drive-keyed row whose status the user chose, refusing instead of dropping it', () => {
+    const before = persisted(heavyWslMoverProfile(unc))
+    const oldId = `repo-a::${unc.at('/home/dev/app')}`
+    const newId = `repo-a::${drive.at('/home/dev/app')}`
+    before.worktreeMeta[newId] = {
+      instanceId: 'discovered',
+      displayName: '',
+      comment: '',
+      linkedIssue: null,
+      linkedPR: null,
+      linkedLinearIssue: null,
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 2,
+      lastActivityAt: 0,
+      // Discovery writes the default; 'done' is something the user set.
+      workspaceStatus: 'done',
+      hostId: 'local'
+    }
+    expect(before.worktreeMeta[oldId]).toBeDefined()
+    expect(() => convert(before, ['repo-a', 'repo-b'])).toThrow(
+      new WslDriveUncKeyCollisionError(newId)
+    )
+  })
+
   it('maps a bare path only inside a converted folder', () => {
     const before = persisted(heavyWslMoverProfile(unc))
     before.repos = [...before.repos, repo('repo-c', unc.at('/home/dev/other'))]

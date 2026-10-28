@@ -6,6 +6,7 @@
  */
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { PersistedState } from '../../shared/persisted-state-types'
+import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
 import { composeWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 
@@ -18,7 +19,6 @@ const DISCOVERY_FIELDS: ReadonlySet<string> = new Set([
   'sortOrder',
   'lastActivityAt',
   'isUnread',
-  'workspaceStatus',
   'smartTier'
 ])
 
@@ -66,8 +66,13 @@ function isDiscoveryOnlyRow(row: WorktreeMeta | undefined): boolean {
 }
 
 function isDiscoveryOnly(row: WorktreeMeta): boolean {
+  // Discovery writes the default status; any other one is the user's choice.
+  if (row.workspaceStatus !== undefined && row.workspaceStatus !== DEFAULT_WORKSPACE_STATUS_ID) {
+    return false
+  }
   return Object.entries(row).every(
     ([field, value]) =>
+      field === 'workspaceStatus' ||
       DISCOVERY_FIELDS.has(field) ||
       value === undefined ||
       value === null ||
