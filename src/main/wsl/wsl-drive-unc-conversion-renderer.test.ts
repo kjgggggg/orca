@@ -28,6 +28,7 @@ function journal(overrides: Partial<WslDriveUncConversion> = {}): void {
     version: 1,
     migrationId: 'conv-1',
     distro: 'Ubuntu',
+    profileId: 'profile-1',
     repoIds: ['r1'],
     folderWorkspaceIds: [],
     rootPaths: ['\\\\wsl.localhost\\Ubuntu\\mnt\\c\\src\\app'],
