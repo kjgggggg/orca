@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../shared/wsl-host-internal-gate'
 import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import {
+  isLocalGitRuntimeRouterInstalled,
   routeLocalGitOptions,
   setLocalGitRuntimeRouter
 } from './git/command-runner/local-git-runtime-route'
@@ -39,6 +40,21 @@ const distroFor = (cwd: string): string | undefined =>
   routeLocalGitOptions<{ cwd: string; wslDistro?: string }>({ cwd }).wslDistro
 
 describe('project runtime Git routing on the real Store', () => {
+  it.each([
+    ['the WSL hosts gate is closed', '', 'win32'],
+    ['not on Windows', '1', 'linux']
+  ])('installs no router, and drops one, when %s', async (_case, gate, platform) => {
+    const { store } = await fixture()
+    const onStateWritten = vi.spyOn(store, 'onStateWritten')
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, gate)
+    Object.defineProperty(process, 'platform', { configurable: true, value: platform })
+    setLocalGitRuntimeRouter(() => 'Ubuntu')
+    installProjectRuntimeGitRouter(store)
+    expect(isLocalGitRuntimeRouterInstalled()).toBe(false)
+    expect(onStateWritten).not.toHaveBeenCalled()
+    expect(distroFor(REPO)).toBeUndefined()
+  })
+
   it('never runs a Git call on a stale route after a runtime switch or a new worktree', async () => {
     const { store } = await fixture()
     store.updateSettings({ localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' } })
