@@ -79,13 +79,19 @@ describe('DeclaredDesktopClients', () => {
     let now = 1_000
     const clients = new DeclaredDesktopClients(() => now)
     const getDevice = devices([{ name: 'Orca Dev' }])
+    const peers = () =>
+      clients.peers({ connectionId: 'me', clientInstanceId: 'me' }, getDevice).peers
     clients.declare('a', 'd0', 'dev')
     clients.declare('b', 'd0', 'dev')
+    const aClosed = now
     clients.forget('a')
+    now += 30_000
+    const bClosed = now
     clients.forget('b')
-    now += DECLARED_CLIENT_RECONNECT_GRACE_MS
-    expect(clients.peers({ connectionId: 'me', clientInstanceId: 'me' }, getDevice).peers).toEqual(
-      []
-    )
+    // Counted from b's close, not a's: still listed when a's grace would have run out.
+    now = aClosed + DECLARED_CLIENT_RECONNECT_GRACE_MS
+    expect(peers()).toHaveLength(1)
+    now = bClosed + DECLARED_CLIENT_RECONNECT_GRACE_MS
+    expect(peers()).toEqual([])
   })
 })

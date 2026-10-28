@@ -128,9 +128,13 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
 
     // Dev's control socket closes: lost contact isn't proof it left, so it still counts while it
     // reconnects (the grace's expiry is unit-tested with a clock).
+    // Read only after the server itself dropped the socket, so this proves the grace, not a race.
+    const declared = () => server['declaredDesktopClients']['byConnection'].size
+    expect(declared()).toBe(2)
     const closed = waitForWsClose(dev.session.ws)
     dev.session.ws.close()
     await closed
+    await expect.poll(declared).toBe(1)
     expect(await peerNames(startup, STABLE)).toEqual(['another Orca'])
 
     // A reconnect declares again.
