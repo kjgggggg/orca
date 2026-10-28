@@ -19,7 +19,8 @@ vi.mock('../ipc/local-file-access-resolution', () => ({
 vi.mock('./remote-file-preview-reader', async (importOriginal) => ({
   ...(await importOriginal<typeof RemoteFilePreviewReader>()),
   statRemotePreviewFile: vi.fn(),
-  readRemotePreviewChunk: vi.fn()
+  readRemotePreviewChunk: vi.fn(),
+  assertRemoteChunkReadsSupported: vi.fn()
 }))
 
 import {
@@ -30,6 +31,7 @@ import {
 } from './media-preview-protocol'
 import {
   RemotePreviewPairingChangedError,
+  assertRemoteChunkReadsSupported,
   readRemotePreviewChunk,
   statRemotePreviewFile
 } from './remote-file-preview-reader'
@@ -143,6 +145,7 @@ describe('media preview protocol', () => {
       vi.mocked(readRemotePreviewChunk)
         .mockReset()
         .mockResolvedValue(Uint8Array.from([2, 3, 4]))
+      vi.mocked(assertRemoteChunkReadsSupported).mockReset().mockResolvedValue(undefined)
     })
     afterEach(() => vi.mocked(Date.now).mockRestore())
 
@@ -155,11 +158,21 @@ describe('media preview protocol', () => {
       expect(statRemotePreviewFile).toHaveBeenCalledTimes(1)
     })
 
-    it('fails the mint, not the player, when the host cannot serve range reads', async () => {
-      vi.mocked(statRemotePreviewFile).mockRejectedValue(new Error('update Orca'))
+    it('fails the mint, not the player, when the host cannot serve chunk reads', async () => {
+      vi.mocked(assertRemoteChunkReadsSupported).mockRejectedValue(new Error('update Orca'))
       await expect(grantRemoteFilePreview(event, addr('out/clip.mp4'), store)).rejects.toThrow(
         'update Orca'
       )
+    })
+
+    it('a reload within the reuse window reports the size the reload saw', async () => {
+      const url = await mint()
+      await (await range(url)).arrayBuffer()
+      vi.mocked(statRemotePreviewFile).mockResolvedValue({ size: 100, mtime: 2 })
+      const reloaded = await mint()
+      const response = await range(reloaded)
+      await response.arrayBuffer()
+      expect(response.headers.get('Content-Range')).toBe('bytes 2-4/100')
     })
 
     it('streams a remote range', async () => {
@@ -193,12 +206,13 @@ describe('media preview protocol', () => {
       expect(chunkSignal?.aborted).toBe(true)
     })
 
-    it('answers a burst of ranges with one stat, then re-stats so a growing file plays on', async () => {
+    it('answers a burst of ranges without a stat per range, then re-stats so a growing file plays on', async () => {
       const url = await mint()
       vi.mocked(statRemotePreviewFile).mockClear()
       const burst = await Promise.all([range(url), range(url, 'bytes=0-1'), range(url, 'bytes=3-')])
       await Promise.all(burst.map((response) => response.arrayBuffer()))
-      expect(statRemotePreviewFile).toHaveBeenCalledTimes(1)
+      // The mint's own stat answers the first burst.
+      expect(statRemotePreviewFile).not.toHaveBeenCalled()
 
       vi.mocked(statRemotePreviewFile).mockResolvedValue({ size: 10, mtime: 2 })
       now += 1_500

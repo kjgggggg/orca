@@ -11,6 +11,7 @@ import { abortWhenRendererGone } from '../ipc/renderer-lifetime-abort'
 import { createMediaRangeResponse } from './media-range-response'
 import {
   RemotePreviewPairingChangedError,
+  assertRemoteChunkReadsSupported,
   readRemotePreviewChunk,
   statRemotePreviewFile,
   type RemotePreviewFileSnapshot
@@ -45,7 +46,8 @@ function mintPreviewUrl(
   sender: PreviewSender,
   target: PreviewTarget,
   store: Store,
-  mimeType: string
+  mimeType: string,
+  snapshot?: RemotePreviewFileSnapshot
 ): PreviewUrl {
   let owned = senders.get(sender.id)
   if (!owned) {
@@ -71,6 +73,11 @@ function mintPreviewUrl(
     token = randomUUID()
     owned.set(key, token)
     grants.set(token, { target, store, mimeType, senderId: sender.id, key })
+  }
+  const grant = grants.get(token)
+  if (grant && snapshot) {
+    // A reload re-mints the same token; its fresh stat must replace a cached older size.
+    grant.stat = { at: Date.now(), snapshot: Promise.resolve(snapshot) }
   }
   return {
     content: '',
@@ -115,15 +122,20 @@ export async function grantRemoteFilePreview(
   if (!preview || !streamsPreviewByRange(preview)) {
     return null
   }
-  // Why: the first stat proves the host serves range reads and that the path is a file,
-  // so an old host or a missing file fails in the tab instead of as a silent player error.
+  // Why: proving the file and range reads here makes a missing file or an old host fail in the tab, not as a silent player error.
   const lifetime = abortWhenRendererGone(event.sender)
+  let snapshot: RemotePreviewFileSnapshot
   try {
-    await statRemotePreviewFile(remote, lifetime.signal)
+    snapshot = await statRemotePreviewFile(remote, lifetime.signal)
+    if (snapshot.size > 0) {
+      await assertRemoteChunkReadsSupported(remote, lifetime.signal)
+    }
+    // A renderer gone mid-mint would leave a grant no teardown ever drops.
+    lifetime.signal.throwIfAborted()
   } finally {
     lifetime.dispose()
   }
-  return mintPreviewUrl(event.sender, { remote }, store, preview.mimeType)
+  return mintPreviewUrl(event.sender, { remote }, store, preview.mimeType, snapshot)
 }
 
 /** Removing a paired runtime ends every preview it backs. */

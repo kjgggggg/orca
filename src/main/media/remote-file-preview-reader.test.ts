@@ -9,6 +9,7 @@ vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => '/user-data' 
 import {
   REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE,
   RemotePreviewPairingChangedError,
+  assertRemoteChunkReadsSupported,
   readRemotePreviewChunk,
   statRemotePreviewFile
 } from './remote-file-preview-reader'
@@ -77,5 +78,37 @@ describe('remote file preview reader', () => {
     await expect(readRemotePreviewChunk(address, 0, 1, signal)).rejects.toBeInstanceOf(
       RemotePreviewPairingChangedError
     )
+  })
+
+  it('proves chunk reads with one byte once per pairing, and re-proves after a re-pair', async () => {
+    callRuntimeEnvironment.mockResolvedValue(
+      ok({ contentBase64: 'AA==', bytesRead: 1, eof: false })
+    )
+    const pinned = { ...address, environmentId: 'env-probe' }
+    await assertRemoteChunkReadsSupported(pinned, signal)
+    await assertRemoteChunkReadsSupported(pinned, signal)
+    expect(callRuntimeEnvironment).toHaveBeenCalledTimes(1)
+    expect(callRuntimeEnvironment).toHaveBeenCalledWith(
+      '/user-data',
+      'env-probe',
+      'files.readChunk',
+      expect.objectContaining({ offset: 0, length: 1 }),
+      20_000,
+      7,
+      undefined,
+      { signal }
+    )
+    await assertRemoteChunkReadsSupported(
+      { ...pinned, expectedEnvironmentPairingRevision: 8 },
+      signal
+    )
+    expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells the user to update a host that answers files.stat but not files.readChunk', async () => {
+    callRuntimeEnvironment.mockResolvedValue(fail('method_not_found', 'x'))
+    await expect(
+      assertRemoteChunkReadsSupported({ ...address, environmentId: 'env-old' }, signal)
+    ).rejects.toThrow(REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE)
   })
 })

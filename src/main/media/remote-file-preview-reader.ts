@@ -4,7 +4,8 @@ import { callRuntimeEnvironment } from '../ipc/runtime-environments/runtime-envi
 import { getCanonicalUserDataPath } from '../persistence'
 
 const STAT_TIMEOUT_MS = 15_000
-const READ_CHUNK_TIMEOUT_MS = 60_000
+// Why: previews share a two-call lane; a stalled chunk must free it well before a download's minute.
+const READ_CHUNK_TIMEOUT_MS = 20_000
 
 export const REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE =
   'Previewing this file requires a newer Orca on the paired machine. Update it and try again.'
@@ -110,4 +111,29 @@ export async function readRemotePreviewChunk(
     throw new Error('The paired machine returned a corrupted file chunk.')
   }
   return bytes
+}
+
+const MAX_CHUNK_READ_VERDICTS = 64
+const chunkReadVerdicts = new Set<string>()
+
+/**
+ * Hosts from v1.4.5 answer files.stat but only v1.4.111 and later answer files.readChunk, and no
+ * capability names it, so one byte proves it; cached per pairing, since a re-pair can change hosts.
+ */
+export async function assertRemoteChunkReadsSupported(
+  address: RemoteFilePreviewAddress,
+  signal: AbortSignal
+): Promise<void> {
+  const key = JSON.stringify([address.environmentId, address.expectedEnvironmentPairingRevision])
+  if (chunkReadVerdicts.has(key)) {
+    return
+  }
+  await readRemotePreviewChunk(address, 0, 1, signal)
+  if (chunkReadVerdicts.size >= MAX_CHUNK_READ_VERDICTS) {
+    const oldest = chunkReadVerdicts.values().next().value
+    if (oldest !== undefined) {
+      chunkReadVerdicts.delete(oldest)
+    }
+  }
+  chunkReadVerdicts.add(key)
 }
