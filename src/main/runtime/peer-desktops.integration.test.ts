@@ -6,8 +6,10 @@ import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-co
 import { encodePairingOffer, parsePairingCode, type PairingOffer } from '../../shared/pairing'
 import { sendRemoteRuntimeRequest } from '../../shared/remote-runtime/remote-runtime-client'
 import {
+  ORCAD_FORK_DESKTOP_METHOD,
   ORCAD_PEER_DESKTOPS_METHOD,
   ORCAD_RELEASE_DESKTOP_METHOD,
+  type OrcadForkDesktopResult,
   type OrcadPeerDesktopsResult
 } from '../../shared/orcad-peer-desktops-contract'
 import { ORCAD_PEER_DESKTOPS_RUNTIME_CAPABILITY } from '../../shared/orcad-runtime-capabilities'
@@ -51,13 +53,30 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
     return parsePairingCode(offer.pairingUrl)!
   }
 
-  function call<T>(offer: PairingOffer, method: string) {
+  function call<T>(offer: PairingOffer, method: string, params?: unknown) {
     return sendRemoteRuntimeRequest<T>(
       pairedRuntimeConnectionFromOffer(offer),
       method,
-      undefined,
+      params,
       5_000
     )
+  }
+
+  /** What a WSL desktop does after enrolling through the startup offer. */
+  async function fork(startup: PairingOffer, label: string): Promise<PairingOffer> {
+    const forked = await call<OrcadForkDesktopResult>(startup, ORCAD_FORK_DESKTOP_METHOD, { label })
+    if (!forked.ok) {
+      throw new Error(forked.error.message)
+    }
+    return { ...startup, deviceToken: forked.result.token }
+  }
+
+  async function peerNames(offer: PairingOffer): Promise<string[]> {
+    const answer = await call<OrcadPeerDesktopsResult>(offer, ORCAD_PEER_DESKTOPS_METHOD)
+    if (!answer.ok) {
+      throw new Error(answer.error.message)
+    }
+    return answer.result.peers.map((peer) => peer.name)
   }
 
   it('tells a desktop which other desktops share the server, and advertises that it can', async () => {
@@ -107,5 +126,33 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
     expect(answer.ok && answer.result.peers).toEqual([])
     // Revoked: the released desktop can no longer call this server.
     await expect(call(stable, 'status.get')).rejects.toMatchObject({ code: 'unauthorized' })
+  })
+
+  it('splits two desktops enrolled through one startup offer, and each sees the other', async () => {
+    const server = await startServer()
+    const startup = pair(server, 'CLI 10/28/2026', 'runtime')
+    const stable = await fork(startup, 'Orca')
+    const dev = await fork(startup, 'Orca Dev')
+    expect(stable.deviceToken).not.toBe(dev.deviceToken)
+    // The startup row they forked from is idle, so it doesn't count.
+    expect(await peerNames(stable)).toEqual(['Orca Dev'])
+    expect(await peerNames(dev)).toEqual(['Orca'])
+  })
+
+  it('lets a lone desktop that forked and released tear down, and re-add from the same offer', async () => {
+    const server = await startServer()
+    const startup = pair(server, 'CLI 10/28/2026', 'runtime')
+    // More cycles than the fork cap: each release frees its slot.
+    for (let cycle = 0; cycle < 40; cycle += 1) {
+      const own = await fork(startup, 'Orca')
+      expect(await peerNames(own)).toEqual([])
+      expect(await call(own, ORCAD_RELEASE_DESKTOP_METHOD)).toMatchObject({
+        ok: true,
+        result: { released: true }
+      })
+    }
+    // The readiness offer still works: a pending-stop retry's repair re-enrolls and forks again.
+    const again = await fork(startup, 'Orca')
+    expect(await call(again, 'status.get')).toMatchObject({ ok: true })
   })
 })

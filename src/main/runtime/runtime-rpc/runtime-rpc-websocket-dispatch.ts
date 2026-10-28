@@ -258,7 +258,8 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
           device.scope === 'runtime'
             ? {
                 list: () => this.listPeerDesktops(device.deviceId),
-                releaseSelf: () => this.releaseOwnRuntimeDevice(device.deviceId)
+                releaseSelf: () => this.releaseOwnRuntimeDevice(device.deviceId),
+                forkSelf: (label) => this.forkOwnRuntimeDevice(device.deviceId, label)
               }
             : undefined,
         delegatedMobileDevices:

@@ -4,8 +4,10 @@ import {
   DelegatedMobileDeviceSyncParamsSchema
 } from '../../../../shared/delegated-mobile-device-contract'
 import {
+  ORCAD_FORK_DESKTOP_METHOD,
   ORCAD_PEER_DESKTOPS_METHOD,
-  ORCAD_RELEASE_DESKTOP_METHOD
+  ORCAD_RELEASE_DESKTOP_METHOD,
+  OrcadForkDesktopParamsSchema
 } from '../../../../shared/orcad-peer-desktops-contract'
 import { RegisterDeviceKeyParamsSchema } from '../../../../shared/device-key-registration-contract'
 import { REGISTER_DEVICE_KEY_METHOD } from '../../../../shared/device-key-capability'
@@ -58,6 +60,18 @@ export const PAIRING_METHODS = [
         throw new Error('runtime_device_required')
       }
       return ctx.peerDesktops.list()
+    }
+  }),
+  defineMethod({
+    name: ORCAD_FORK_DESKTOP_METHOD,
+    // Only ever the caller's own row: the transport names it, never a param.
+    permission: 'workspace',
+    params: OrcadForkDesktopParamsSchema,
+    handler: (params, ctx) => {
+      if (!ctx.peerDesktops) {
+        throw new Error('runtime_device_required')
+      }
+      return ctx.peerDesktops.forkSelf(params.label)
     }
   }),
   defineMethod({

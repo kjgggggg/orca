@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { DeviceEntry } from './device-registry'
 import { devicePrincipalOf } from './device-principal'
 
-const MAX_FORKS_PER_TOKEN_ROW = 32
+export const MAX_FORKS_PER_TOKEN_ROW = 32
 
 export class DeviceKeyForkError extends Error {
   constructor(

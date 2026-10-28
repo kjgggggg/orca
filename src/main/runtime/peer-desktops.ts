@@ -1,7 +1,7 @@
 import type { OrcadPeerDesktopsResult } from '../../shared/orcad-peer-desktops-contract'
 import type { DeviceEntry } from './device-entry'
 
-/** Other desktops paired with this server: never the caller, phones or unused offers. */
+/** Other desktops paired with this server: never the caller, phones, unused offers or idle forked-from tokens. */
 export function listPeerDesktops(
   devices: readonly DeviceEntry[],
   callerDeviceId: string,
@@ -18,6 +18,9 @@ export function listPeerDesktops(
           // sharing its fingerprint) can be different desktops that paired through one code.
           (callerKey === undefined || device.devicePublicKeyB64 !== callerKey) &&
           device.parentDeviceId === undefined &&
+          // A shared token row its desktops forked from counts only while something still uses it.
+          (!devices.some((fork) => fork.forkedFrom === device.deviceId) ||
+            isConnected(device.deviceId)) &&
           !device.ephemeral &&
           device.lastSeenAt > 0
       )

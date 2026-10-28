@@ -59,13 +59,15 @@ export class DeviceRegistry {
     this.load()
   }
 
+  /** `fork`: a desktop's own row split from the shared token it enrolled through (R39). */
   addDevice(
     name: string,
     scope: DeviceScope = 'mobile',
     pairingReach: RuntimePairingReach = 'network',
-    grants: readonly RuntimeDeviceGrant[] = []
+    grants: readonly RuntimeDeviceGrant[] = [],
+    fork?: Required<Pick<DeviceEntry, 'forkedFrom' | 'lastSeenAt'>>
   ): TokenDeviceEntry {
-    return this.createAndPersistDevice(this.devices, name, scope, pairingReach, grants)
+    return this.createAndPersistDevice(this.devices, name, scope, pairingReach, grants, fork)
   }
 
   private createAndPersistDevice(
@@ -73,7 +75,8 @@ export class DeviceRegistry {
     name: string,
     scope: DeviceScope,
     pairingReach: RuntimePairingReach,
-    grants: readonly RuntimeDeviceGrant[]
+    grants: readonly RuntimeDeviceGrant[],
+    fork?: Required<Pick<DeviceEntry, 'forkedFrom' | 'lastSeenAt'>>
   ): TokenDeviceEntry {
     const validatedGrants = validGrants(grants, scope)
     const entry: TokenDeviceEntry = {
@@ -83,7 +86,8 @@ export class DeviceRegistry {
       pairedAt: Date.now(),
       lastSeenAt: 0,
       pairingReach,
-      ...(validatedGrants ? { grants: validatedGrants } : {})
+      ...(validatedGrants ? { grants: validatedGrants } : {}),
+      ...fork
     }
     const nextDevices = [...existingDevices, entry]
     // Credentials become valid only after durable persistence.
@@ -104,22 +108,16 @@ export class DeviceRegistry {
       (d): d is TokenDeviceEntry =>
         isPendingTokenRow(d) && d.scope === scope && sameGrants(d, validGrants(grants, scope) ?? [])
     )
-    if (existing) {
-      // Widen advertised reach, never narrow it and break an off-host link already handed out.
-      return pairingReach === 'network' && existing.pairingReach === 'this-computer'
-        ? this.setPairingReach(existing, 'network')
-        : existing
+    // Widen advertised reach, never narrow it and break an off-host link already handed out.
+    if (existing && !(pairingReach === 'network' && existing.pairingReach === 'this-computer')) {
+      return existing
     }
-    return this.addDevice(name, scope, pairingReach, grants)
-  }
-
-  private setPairingReach(
-    existing: TokenDeviceEntry,
-    pairingReach: RuntimePairingReach
-  ): TokenDeviceEntry {
-    const updated: TokenDeviceEntry = { ...existing, pairingReach }
-    this.replaceRow(existing.deviceId, () => updated)
-    return updated
+    if (!existing) {
+      return this.addDevice(name, scope, pairingReach, grants)
+    }
+    const widened: TokenDeviceEntry = { ...existing, pairingReach }
+    this.replaceRow(existing.deviceId, () => widened)
+    return widened
   }
 
   /** Explicit QR regeneration revokes leaked unused offers; ordinary re-advertisement reuses them. */

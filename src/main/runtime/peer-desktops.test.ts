@@ -43,12 +43,11 @@ describe('listPeerDesktops', () => {
         devicePublicKeyB64: 'kb'
       })
     ]
+    // The idle token row they forked from doesn't count; each sees the other.
     expect(listPeerDesktops(devices, 'a', () => false).peers.map((peer) => peer.name)).toEqual([
-      'token',
       'b'
     ])
     expect(listPeerDesktops(devices, 'b', () => false).peers.map((peer) => peer.name)).toEqual([
-      'token',
       'a'
     ])
   })
@@ -62,6 +61,29 @@ describe('listPeerDesktops', () => {
     ]
     expect(listPeerDesktops(devices, 'me', () => false).peers.map((peer) => peer.name)).toEqual([
       'dev'
+    ])
+  })
+
+  it('counts a forked-from startup token only while something is connected on it', () => {
+    const devices = [
+      device({ deviceId: 'startup', name: 'CLI', lastSeenAt: 9 }),
+      device({ deviceId: 'me', forkedFrom: 'startup' })
+    ]
+    // A lone desktop that forked and is removing: nothing else uses the server.
+    expect(listPeerDesktops(devices, 'me', () => false).peers).toEqual([])
+    // An older desktop still on the shared token, connected now, keeps it.
+    expect(listPeerDesktops(devices, 'me', (id) => id === 'startup').peers).toEqual([
+      { name: 'CLI', connected: true, lastSeenAt: 9 }
+    ])
+  })
+
+  it('still counts a startup token nobody forked from, by its last sighting', () => {
+    const devices = [
+      device({ deviceId: 'startup', name: 'CLI', lastSeenAt: 9 }),
+      device({ deviceId: 'me' })
+    ]
+    expect(listPeerDesktops(devices, 'me', () => false).peers.map((peer) => peer.name)).toEqual([
+      'CLI'
     ])
   })
 })

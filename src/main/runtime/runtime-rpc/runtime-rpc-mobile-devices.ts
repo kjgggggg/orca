@@ -6,7 +6,11 @@ import type {
   DelegatedPhone,
   DelegatedMobileDeviceSyncResult
 } from '../../../shared/delegated-mobile-device-contract'
-import type { OrcadPeerDesktopsResult } from '../../../shared/orcad-peer-desktops-contract'
+import type {
+  OrcadForkDesktopResult,
+  OrcadPeerDesktopsResult
+} from '../../../shared/orcad-peer-desktops-contract'
+import { forkDesktopToken } from '../desktop-token-fork'
 import { listPeerDesktops } from '../peer-desktops'
 import { RuntimeRpcRequestAdmission } from './runtime-rpc-request-admission'
 
@@ -70,6 +74,14 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
       RELEASED_DEVICE_DISCONNECT_MS
     ).unref?.()
     return { released: true }
+  }
+
+  protected forkOwnRuntimeDevice(deviceId: string, label: string): OrcadForkDesktopResult {
+    if (!this.deviceRegistry) {
+      throw new Error('device_registry_unavailable')
+    }
+    const fork = forkDesktopToken(this.deviceRegistry, deviceId, label)
+    return { deviceId: fork.deviceId, token: fork.token }
   }
 
   private removeRuntimeDevice(deviceId: string): boolean {
