@@ -8,7 +8,9 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../shared/ex
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import type { Project } from '../../shared/project-types'
 import type { Repo } from '../../shared/repo-types'
+import { isFolderRepo } from '../../shared/repo-kind'
 import { isWslUncPath } from '../../shared/wsl-paths'
+import { isForeignLink } from '../git/worktree-prune-guard'
 import type {
   WslDriveProjectConversionResult,
   WslDriveProjectPreview
@@ -45,7 +47,10 @@ export async function previewWslDriveProjectWindowsGit(
     return preview
   }
   preview.distro = runtime.runtime.distro
-  const repos = deps.getRepos().filter((repo) => project.sourceRepoIds.includes(repo.id))
+  // Folder repos run no Git, so the Git choice never reaches them.
+  const repos = deps
+    .getRepos()
+    .filter((repo) => project.sourceRepoIds.includes(repo.id) && !isFolderRepo(repo))
   for (const repo of repos) {
     if (
       getRepoExecutionHostId(repo) !== LOCAL_EXECUTION_HOST_ID ||
@@ -139,7 +144,9 @@ async function wslAuthoredWorktreePaths(
 ): Promise<string[]> {
   const commonDir = (await deps.runWindowsGit(['rev-parse', '--git-common-dir'], repoPath)).trim()
   const links = await deps.readWorktreeLinks(win32.resolve(repoPath, commonDir))
-  return links.filter((link) => link.startsWith('/')).map((link) => link.replace(/\/\.git$/, ''))
+  return links
+    .filter((link) => isForeignLink(link, false))
+    .map((link) => link.replace(/\/\.git$/, ''))
 }
 
 async function readConfig(

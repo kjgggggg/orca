@@ -115,6 +115,8 @@ describe('converting a WSL project on a Windows drive to Windows Git', () => {
       preference: { kind: 'wsl', distro: 'Ubuntu' },
       links: [
         'C:/src/app-feature/.git',
+        // Windows Git reaches a worktree inside the distro over UNC; that link is its own.
+        '//wsl.localhost/Ubuntu/home/me/trees/app-unc/.git',
         '/home/me/orca/workspaces/app/fix/.git',
         '/mnt/c/src/app-wsl/.git'
       ]
@@ -161,6 +163,18 @@ describe('converting a WSL project on a Windows drive to Windows Git', () => {
     await expect(
       convertWslDriveProjectToWindowsGit(deps, 'p1', { alignLineEndings: false })
     ).resolves.toEqual({ ok: false, blockers: [blocker] })
+  })
+
+  it('leaves a folder repo out: it runs no Git, so there is nothing to check', async () => {
+    const { deps, runWindowsGit } = setup({
+      preference: { kind: 'wsl', distro: 'Ubuntu' },
+      repo: { kind: 'folder', path: String.raw`\\wsl.localhost\Ubuntu\home\me\notes` }
+    })
+    await expect(previewWslDriveProjectWindowsGit(deps, 'p1')).resolves.toMatchObject({
+      repos: [],
+      blockers: []
+    })
+    expect(runWindowsGit).not.toHaveBeenCalled()
   })
 
   it.each([
