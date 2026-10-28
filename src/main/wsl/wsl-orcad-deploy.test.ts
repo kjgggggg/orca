@@ -68,7 +68,7 @@ vi.mock('../managed-server/lifecycle/orcad-managed-runtime-context', async (impo
   probeManagedOrcadReadiness: mocks.probe
 }))
 
-import { deployAndLaunchWslOrcad, isWsl1KernelRelease } from './wsl-orcad-deploy'
+import { deployAndLaunchWslOrcad } from './wsl-orcad-deploy'
 import { resetOrcadUpdateFailuresForTests } from '../managed-server/lifecycle/orcad-managed-update-failure-memory'
 
 beforeEach(() => resetOrcadUpdateFailuresForTests())
@@ -189,6 +189,47 @@ describe('deployAndLaunchWslOrcad', () => {
       "cat '/home/u/.orca-remote/orcad-1.5.0+ab/.orcad-pid' 2>/dev/null || true",
       expect.anything()
     )
+  })
+
+  it('reads the context while the holder starts, but recovers nothing until the distro is held', async () => {
+    const hold = holder()
+    let releaseHold: () => void = () => {}
+    vi.mocked(hold.ensureHeld).mockImplementation(async (distro: string) => {
+      mocks.steps.push('hold-start')
+      await new Promise<void>((resolve) => {
+        releaseHold = resolve
+      })
+      mocks.steps.push('held')
+      return {
+        outcome: 'spawned' as const,
+        record: { version: 1 as const, distro, pid: 9, creationTimeMs: 1, startedAtMs: 1 }
+      }
+    })
+    const recover = mocks.recover.getMockImplementation()
+    mocks.recover.mockImplementation(async (...args: unknown[]) => {
+      mocks.steps.push('recover')
+      return recover?.(...args)
+    })
+
+    const launched = launch(undefined, { holder: hold })
+    await vi.waitFor(() => expect(mocks.steps).toContain('context'))
+    expect(mocks.steps).not.toContain('recover')
+    releaseHold()
+    await launched
+
+    expect(mocks.steps.slice(0, 5)).toEqual(['uname', 'hold-start', 'context', 'held', 'recover'])
+  })
+
+  it('fails the connect before recovery when the holder cannot hold the distro', async () => {
+    const hold = holder()
+    vi.mocked(hold.ensureHeld).mockRejectedValue(
+      new Error('holder exited before the distro started')
+    )
+
+    await expect(launch(undefined, { holder: hold })).rejects.toThrow('holder exited')
+
+    expect(mocks.recover).not.toHaveBeenCalled()
+    expect(mocks.deploy).not.toHaveBeenCalled()
   })
 
   it('applies the SSH census and downgrade admission to the first deploy', async () => {
@@ -816,15 +857,5 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
     await launch()
     expect(mocks.incumbent).not.toHaveBeenCalled()
     expect(mocks.deploy.mock.calls[0][0].census.liveSessions).toBeNull()
-  })
-})
-
-describe('isWsl1KernelRelease', () => {
-  it('tells the WSL 1 syscall layer from a WSL 2 kernel, stock or custom', () => {
-    expect(isWsl1KernelRelease('4.4.0-19041-Microsoft')).toBe(true)
-    expect(isWsl1KernelRelease('4.4.0-22621-Microsoft\n')).toBe(true)
-    expect(isWsl1KernelRelease('5.15.167.4-microsoft-standard-WSL2')).toBe(false)
-    expect(isWsl1KernelRelease('6.6.36.6-microsoft-standard-WSL2+')).toBe(false)
-    expect(isWsl1KernelRelease('6.10.0-custom')).toBe(false)
   })
 })
