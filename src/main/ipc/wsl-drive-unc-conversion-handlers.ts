@@ -53,7 +53,8 @@ export function registerWslDriveUncConversionHandlers(
             const { activeProfileId } = getOrcaProfileListState()
             return readProfileProjectTransferState(activeProfileId, getProfileUserDataPath()).state
           },
-          pause: (scope) => pauseWslMoveScope(createWslMoveDriverDeps(store, runtime), scope),
+          pause: (scope) =>
+            pauseWslMoveScope(createWslMoveDriverDeps(store, runtime, 'user'), scope),
           // No wslDistro: this runs the host's Git, in the drive path.
           runWindowsGit: async (gitArgs, cwd) => (await gitExecFileAsync(gitArgs, { cwd })).stdout,
           readWorktreeLinks,
