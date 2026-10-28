@@ -1,7 +1,7 @@
 import type { RemoteFilePreviewAddress } from '../../shared/remote-file-preview-address'
 import type { RuntimeFileReadChunkResult } from '../../shared/runtime-file-contracts'
 import { callRuntimeEnvironment } from '../ipc/runtime-environments/runtime-environment-transport-routing'
-import { getCanonicalUserDataPath } from '../persistence'
+import { getRuntimeEnvironmentRegistryRoot } from '../ipc/runtime-environments/runtime-environment-registry-root'
 
 const STAT_TIMEOUT_MS = 15_000
 // Why: previews share a two-call lane; a stalled chunk must free it well before a download's minute.
@@ -27,7 +27,8 @@ async function callRemote(
   signal: AbortSignal
 ): Promise<unknown> {
   const response = await callRuntimeEnvironment(
-    getCanonicalUserDataPath(),
+    // The registry the pairing IPC writes; the canonical path can differ in casing.
+    getRuntimeEnvironmentRegistryRoot(),
     address.environmentId,
     method,
     params,
@@ -124,11 +125,16 @@ export async function assertRemoteChunkReadsSupported(
   address: RemoteFilePreviewAddress,
   signal: AbortSignal
 ): Promise<void> {
-  const key = JSON.stringify([address.environmentId, address.expectedEnvironmentPairingRevision])
-  if (chunkReadVerdicts.has(key)) {
+  const revision = address.expectedEnvironmentPairingRevision
+  const key = JSON.stringify([address.environmentId, revision])
+  if (revision !== undefined && chunkReadVerdicts.has(key)) {
     return
   }
   await readRemotePreviewChunk(address, 0, 1, signal)
+  // Why: an unpinned verdict would outlive a re-pair under the same environment id.
+  if (revision === undefined) {
+    return
+  }
   if (chunkReadVerdicts.size >= MAX_CHUNK_READ_VERDICTS) {
     const oldest = chunkReadVerdicts.values().next().value
     if (oldest !== undefined) {

@@ -4,7 +4,9 @@ const { callRuntimeEnvironment } = vi.hoisted(() => ({ callRuntimeEnvironment: v
 vi.mock('../ipc/runtime-environments/runtime-environment-transport-routing', () => ({
   callRuntimeEnvironment
 }))
-vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => '/user-data' }))
+vi.mock('../ipc/runtime-environments/runtime-environment-registry-root', () => ({
+  getRuntimeEnvironmentRegistryRoot: () => '/user-data'
+}))
 
 import {
   REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE,
@@ -102,6 +104,16 @@ describe('remote file preview reader', () => {
       { ...pinned, expectedEnvironmentPairingRevision: 8 },
       signal
     )
+    expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
+  })
+
+  it('never caches a verdict no pairing revision pins', async () => {
+    callRuntimeEnvironment.mockResolvedValue(
+      ok({ contentBase64: 'AA==', bytesRead: 1, eof: false })
+    )
+    const unpinned = { environmentId: 'env-unpinned', worktree: 'id:wt-1', relativePath: 'a.mp4' }
+    await assertRemoteChunkReadsSupported(unpinned, signal)
+    await assertRemoteChunkReadsSupported(unpinned, signal)
     expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
   })
 
