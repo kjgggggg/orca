@@ -20736,6 +20736,7 @@
       "duplicate": "{{drivePath}} is already a project in Orca.",
       "mixed": "Some of this project’s folders are inside WSL, not on a Windows drive.",
       "overlap": "This project shares folders with a project Orca can’t convert, so they would split.",
+      "notDriveMount": "In this distro, that folder isn’t {{drivePath}}: it isn’t mounted from that Windows drive.",
       "notConvertible": "This project isn’t on a Windows drive on this computer.",
       "differingState": "Orca saved different details for this folder under both its WSL path and {{drivePath}}, so nothing changed.",
       "projectSplit": "This project also holds a repository that isn’t converting, so nothing changed."

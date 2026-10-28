@@ -71,6 +71,12 @@ function blockerMessage(blocker: WslDriveUncConversionBlocker, drivePath: string
             'wslDriveUnc.blocker.mixed',
             'Some of this project’s folders are inside WSL, not on a Windows drive.'
           )
+        case 'not-windows-drive-mount':
+          return translate(
+            'wslDriveUnc.blocker.notDriveMount',
+            'In this distro, that folder isn’t {{drivePath}}: it isn’t mounted from that Windows drive.',
+            { drivePath }
+          )
         case 'overlaps-refused-project':
           return translate(
             'wslDriveUnc.blocker.overlap',

@@ -25,6 +25,7 @@ describe('WslDriveUncConversionRow', () => {
           outcome: 'refused',
           blockers: [
             { kind: 'not-convertible', id: 'r1', reason: 'duplicate-windows-project' },
+            { kind: 'not-convertible', id: 'r1', reason: 'not-windows-drive-mount' },
             { kind: 'wsl-authored-worktrees', repoId: 'r1', paths: ['/mnt/c/src/fix'] }
           ]
         },
@@ -32,6 +33,7 @@ describe('WslDriveUncConversionRow', () => {
       )
     ).toEqual([
       String.raw`C:\src\app is already a project in Orca.`,
+      String.raw`In this distro, that folder isn’t C:\src\app: it isn’t mounted from that Windows drive.`,
       expect.stringContaining('/mnt/c/src/fix')
     ])
     expect(
