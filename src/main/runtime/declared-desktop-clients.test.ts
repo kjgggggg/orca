@@ -94,4 +94,18 @@ describe('DeclaredDesktopClients', () => {
     now = bClosed + DECLARED_CLIENT_RECONNECT_GRACE_MS
     expect(peers()).toEqual([])
   })
+
+  it('sweeps expired graces on every close, even if nobody asks for peers', () => {
+    let now = 1_000
+    const clients = new DeclaredDesktopClients(() => now)
+    for (let i = 0; i < 50; i += 1) {
+      clients.declare(`socket-${i}`, 'd0', `install-${i}`)
+      clients.forget(`socket-${i}`)
+    }
+    expect(clients.reconnectingCount).toBe(50)
+    now += DECLARED_CLIENT_RECONNECT_GRACE_MS
+    clients.declare('last', 'd0', 'install-last')
+    clients.forget('last')
+    expect(clients.reconnectingCount).toBe(1)
+  })
 })

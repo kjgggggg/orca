@@ -18,7 +18,8 @@ export class DeclaredDesktopClients {
   // Installations whose last declared socket closed recently, by id, until their grace ends.
   private readonly reconnecting = new Map<string, { deviceId: string; until: number }>()
 
-  constructor(private readonly now: () => number = Date.now) {}
+  // Monotonic: a wall-clock jump can't stretch or cut the grace.
+  constructor(private readonly now: () => number = () => performance.now()) {}
 
   declare(connectionId: string, deviceId: string, clientInstanceId: string): void {
     this.byConnection.set(connectionId, { clientInstanceId, deviceId })
@@ -26,6 +27,7 @@ export class DeclaredDesktopClients {
   }
 
   forget(connectionId: string): void {
+    this.sweepExpired()
     const declaration = this.byConnection.get(connectionId)
     this.byConnection.delete(connectionId)
     if (
@@ -48,12 +50,7 @@ export class DeclaredDesktopClients {
     const callerInstance =
       caller.clientInstanceId ?? this.byConnection.get(caller.connectionId)?.clientInstanceId
     const names = new Map<string, string>()
-    const now = this.now()
-    for (const [clientInstanceId, { until }] of this.reconnecting) {
-      if (until <= now) {
-        this.reconnecting.delete(clientInstanceId)
-      }
-    }
+    this.sweepExpired()
     const candidates: [string | null, Declaration][] = [
       ...this.byConnection,
       ...[...this.reconnecting].map(([clientInstanceId, { deviceId }]): [null, Declaration] => [
@@ -77,6 +74,20 @@ export class DeclaredDesktopClients {
       names.set(declaration.clientInstanceId, displayName(device.name))
     }
     return { peers: [...names.values()].map((name) => ({ name })) }
+  }
+
+  /** Bounded even if nothing asks for peers: every close drops expired graces first. */
+  get reconnectingCount(): number {
+    return this.reconnecting.size
+  }
+
+  private sweepExpired(): void {
+    const now = this.now()
+    for (const [clientInstanceId, { until }] of this.reconnecting) {
+      if (until <= now) {
+        this.reconnecting.delete(clientInstanceId)
+      }
+    }
   }
 }
 
