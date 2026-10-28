@@ -42,8 +42,8 @@ type WslDriveUncScopeState = {
 /** `\\wsl.localhost\<distro>\mnt\c\x` → `C:\x`; null for any other path. */
 export function wslUncDrivePathToWindows(path: string, distro: string): string | null {
   const linux = wslUncPathToLinux(path, distro)?.replace(/\\/g, '/')
-  // Windows folds the `/mnt/<drive>` part of a UNC path case-insensitively.
-  const match = linux?.match(/^\/mnt\/([a-z])(\/.*)?$/i)
+  // Same rule as foldWslUncPathCaseInsensitiveParts: only lowercase `/mnt` is drvfs, any letter case.
+  const match = linux?.match(/^\/mnt\/([a-zA-Z])(\/.*)?$/)
   if (!match) {
     return null
   }

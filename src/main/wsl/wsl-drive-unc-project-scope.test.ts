@@ -38,7 +38,9 @@ const DRIVES: WindowsDriveMount[] = [
 describe('wslUncDrivePathToWindows', () => {
   it.each([
     [String.raw`\\wsl.localhost\Ubuntu\mnt\c\src\app`, String.raw`C:\src\app`],
-    ['//wsl$/ubuntu/MNT/d/work/', String.raw`D:\work`],
+    ['//wsl$/ubuntu/mnt/D/work/', String.raw`D:\work`],
+    // `/MNT` is an ordinary, case-sensitive Linux folder, as foldWslUncPathCaseInsensitiveParts says.
+    ['//wsl$/ubuntu/MNT/d/work/', null],
     [String.raw`\\wsl.localhost\Ubuntu\mnt\c`, 'C:\\'],
     [String.raw`\\wsl.localhost\Ubuntu\home\me\app`, null],
     [String.raw`\\wsl.localhost\Debian\mnt\c\src\app`, null],
