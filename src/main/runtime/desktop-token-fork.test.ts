@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { DeviceEntry, TokenDeviceEntry } from './device-entry'
-import { DesktopTokenForkError, forkDesktopToken } from './desktop-token-fork'
+import {
+  DesktopTokenForkError,
+  forkDesktopToken,
+  sanitizeDesktopForkLabel
+} from './desktop-token-fork'
 import { MAX_FORKS_PER_TOKEN_ROW } from './device-key-fork'
 
 function registry(devices: DeviceEntry[]) {
@@ -75,5 +79,20 @@ describe('forkDesktopToken', () => {
       1
     )
     expect(forkDesktopToken(reg, 'startup', 'One more').name).toBe('One more')
+  })
+})
+
+describe('sanitizeDesktopForkLabel', () => {
+  it('keeps a plain name and strips control, zero-width and bidi characters', () => {
+    expect(sanitizeDesktopForkLabel('Orca Dev')).toBe('Orca Dev')
+    expect(sanitizeDesktopForkLabel('  Orca‮​ Dev\n\t ')).toBe('Orca Dev')
+    expect(sanitizeDesktopForkLabel('x'.repeat(200))).toHaveLength(64)
+    expect(sanitizeDesktopForkLabel('\u0007​')).toBe('')
+  })
+
+  it('refuses a label with nothing left to show', () => {
+    expect(() => forkDesktopToken(registry([{ ...STARTUP }]), 'startup', '\u0000⁦')).toThrow(
+      'invalid_label'
+    )
   })
 })

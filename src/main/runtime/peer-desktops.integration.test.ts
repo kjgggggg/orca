@@ -155,4 +155,37 @@ describe(ORCAD_PEER_DESKTOPS_METHOD, () => {
     const again = await fork(startup, 'Orca')
     expect(await call(again, 'status.get')).toMatchObject({ ok: true })
   })
+
+  it('mints a desktop row only for the holder of the advertised startup offer, with its own grants', async () => {
+    const server = await startServer()
+    const startup = pair(server, 'CLI 10/28/2026', 'runtime')
+    const own = await fork(startup, '  Orca\u202e Dev\n ')
+    const registry = server.getDeviceRegistry()!
+    const startupRow = registry.listDevices().find((d) => d.token === startup.deviceToken)!
+    const ownRow = registry.listDevices().find((d) => d.token === own.deviceToken)!
+    // Display-only label: control and bidi characters gone; exactly the startup row's grants and reach.
+    expect(ownRow).toMatchObject({
+      name: 'Orca Dev',
+      scope: 'runtime',
+      forkedFrom: startupRow.deviceId,
+      pairingReach: startupRow.pairingReach
+    })
+    expect(ownRow.grants ?? []).toEqual(startupRow.grants ?? [])
+
+    const refused = async (offer: PairingOffer, params: unknown) => {
+      const answer = await call(offer, ORCAD_FORK_DESKTOP_METHOD, params)
+      return answer.ok ? null : answer.error.message
+    }
+    // A forked row, a grant request and an empty label are all refused.
+    expect(await refused(own, { label: 'Again' })).toContain('not_a_shared_desktop_token')
+    expect(await refused(startup, { label: 'X', grants: ['desktop-control'] })).not.toBeNull()
+    expect(await refused(startup, { label: '\u0007\u200b' })).toContain('invalid_label')
+    // Once a newer desktop offer is advertised, the old one no longer forks.
+    const newer = pair(server, 'CLI later', 'runtime')
+    expect(newer.deviceToken).not.toBe(startup.deviceToken)
+    expect(await refused(startup, { label: 'Late' })).toContain('not_a_shared_desktop_token')
+    // A phone can't fork at all.
+    const phone = pair(server, 'Phone', 'mobile')
+    expect(await refused(phone, { label: 'Phone' }).catch(() => 'refused')).not.toBeNull()
+  })
 })

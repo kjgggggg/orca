@@ -76,6 +76,8 @@ export class RuntimeRpcState {
   protected mobileDesktopRelay: MobileDesktopRelay | null = null
   protected mobileRelayHostCatalog: MobileRelayHostCatalog | null = null
   protected detachPairedServerRows: (() => void) | null = null
+  // The desktop pairing offer this process advertises last (orcad's startup offer); only its holders fork (R39).
+  protected advertisedRuntimeOfferDeviceId: string | null = null
   // Why: lets an automatic mint install a provider whose launch-time construction failed.
   protected mobileRelayPairingProviderInstaller: (() => Promise<unknown>) | null = null
   protected mobileRelayPairingOfferQueue: Promise<void> = Promise.resolve()

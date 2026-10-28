@@ -259,7 +259,13 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
             ? {
                 list: () => this.listPeerDesktops(device.deviceId),
                 releaseSelf: () => this.releaseOwnRuntimeDevice(device.deviceId),
-                forkSelf: (label) => this.forkOwnRuntimeDevice(device.deviceId, label)
+                // Mints a credential: only over the authenticated E2EE channel.
+                forkSelf: (label) => {
+                  if (!authenticatedSocket) {
+                    throw new Error('e2ee_channel_required')
+                  }
+                  return this.forkOwnRuntimeDevice(device.deviceId, label)
+                }
               }
             : undefined,
         delegatedMobileDevices:
