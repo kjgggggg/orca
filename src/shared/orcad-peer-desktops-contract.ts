@@ -2,30 +2,23 @@ import { z } from 'zod'
 
 // Why: a WSL host's server is one per Linux login, so other Orca desktops may share it.
 export const ORCAD_PEER_DESKTOPS_METHOD = 'host.peerDesktops'
-// A desktop enrolled through the server's startup offer splits off its own token row.
-export const ORCAD_FORK_DESKTOP_METHOD = 'host.forkDesktop'
-// A desktop that leaves a shared server revokes its own device, so peers stop counting it.
-export const ORCAD_RELEASE_DESKTOP_METHOD = 'host.releaseDesktop'
+// A desktop names its installation on its long-lived control socket, so peers tell installations apart.
+export const ORCAD_DECLARE_CLIENT_METHOD = 'host.declareClient'
 
-const PeerDesktopSchema = z.object({
-  name: z.string(),
-  /** A socket from that desktop is authenticated right now. */
-  connected: z.boolean(),
-  /** When that desktop last authenticated; 0 is never. */
-  lastSeenAt: z.number()
+const ClientInstanceIdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/)
+
+export const OrcadDeclareClientParamsSchema = z
+  .object({ clientInstanceId: ClientInstanceIdSchema })
+  .strict()
+
+/** The caller's own installation, so none of its sockets count as another desktop. */
+export const OrcadPeerDesktopsParamsSchema = z
+  .object({ clientInstanceId: ClientInstanceIdSchema.optional() })
+  .strict()
+
+/** Other desktop installations with a declared control socket open on this server right now. */
+export const OrcadPeerDesktopsResultSchema = z.object({
+  peers: z.array(z.object({ name: z.string() }))
 })
 
-/** Every other desktop paired with this server; the caller and phones are left out. */
-export const OrcadPeerDesktopsResultSchema = z.object({ peers: z.array(PeerDesktopSchema) })
-
-export type OrcadPeerDesktop = z.infer<typeof PeerDesktopSchema>
 export type OrcadPeerDesktopsResult = z.infer<typeof OrcadPeerDesktopsResultSchema>
-
-export const OrcadReleaseDesktopResultSchema = z.object({ released: z.boolean() })
-
-export const OrcadForkDesktopParamsSchema = z.object({ label: z.string().min(1).max(128) }).strict()
-export const OrcadForkDesktopResultSchema = z.object({
-  deviceId: z.string().min(1),
-  token: z.string().min(1)
-})
-export type OrcadForkDesktopResult = z.infer<typeof OrcadForkDesktopResultSchema>

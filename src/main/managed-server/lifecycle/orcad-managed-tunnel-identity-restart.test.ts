@@ -150,13 +150,10 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
         remotePort: first.connection.remotePort
       }
     })
-    // The first connect split this desktop off the startup offer (R39); its own row is the caller since.
-    const settled = await connect()
-    expect(settled.caller).toBeTruthy()
     await server.stop()
     server = await startOrcad(hostProfile)
     const restarted = await connect()
-    expect(restarted.caller).toBe(settled.caller)
+    expect(restarted.caller).toBe(first.caller)
     const paired = parsePairingCode(first.connection.pairingOffer)!
     server.getDeviceRegistry()!.removeDevice(paired.pairedDeviceId!)
     await expect(connect()).rejects.toThrow('orcad_pairing_rejected')

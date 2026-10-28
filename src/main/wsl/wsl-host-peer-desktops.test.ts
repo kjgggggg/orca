@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ORCAD_PEER_DESKTOPS_RUNTIME_CAPABILITY } from '../../shared/orcad-runtime-capabilities'
 import { ORCAD_PEER_DESKTOPS_METHOD } from '../../shared/orcad-peer-desktops-contract'
-import { readWslHostPeerDesktops, WSL_HOST_PEER_DESKTOP_RECENT_MS } from './wsl-host-peer-desktops'
-
-const NOW = 10 * WSL_HOST_PEER_DESKTOP_RECENT_MS
+import { readWslHostPeerDesktops } from './wsl-host-peer-desktops'
 
 function server(peers: unknown, capabilities = [ORCAD_PEER_DESKTOPS_RUNTIME_CAPABILITY]) {
   return vi.fn(async (method: string) => {
@@ -18,40 +16,36 @@ function server(peers: unknown, capabilities = [ORCAD_PEER_DESKTOPS_RUNTIME_CAPA
 }
 
 describe('readWslHostPeerDesktops', () => {
-  it('names another desktop connected now or seen recently', async () => {
-    await expect(
-      readWslHostPeerDesktops(
-        server([
-          { name: 'Orca Dev', connected: true, lastSeenAt: 1 },
-          { name: 'Orca Beta', connected: false, lastSeenAt: NOW - 1000 }
-        ]),
-        NOW
-      )
-    ).resolves.toEqual({ kind: 'shared', names: ['Orca Dev', 'Orca Beta'] })
+  it('names the other Orcas connected now, asking as this installation', async () => {
+    const call = server([{ name: 'Orca Dev' }])
+    await expect(readWslHostPeerDesktops(call, 'this-installation')).resolves.toEqual({
+      kind: 'shared',
+      names: ['Orca Dev']
+    })
+    expect(call).toHaveBeenCalledWith(ORCAD_PEER_DESKTOPS_METHOD, {
+      clientInstanceId: 'this-installation'
+    })
   })
 
-  it('lets go of a desktop gone longer than the window', async () => {
-    await expect(
-      readWslHostPeerDesktops(
-        server([
-          { name: 'Old', connected: false, lastSeenAt: NOW - WSL_HOST_PEER_DESKTOP_RECENT_MS }
-        ]),
-        NOW
-      )
-    ).resolves.toEqual({ kind: 'none' })
+  it('lets the teardown proceed when no other Orca is connected', async () => {
+    await expect(readWslHostPeerDesktops(server([]), 'this-installation')).resolves.toEqual({
+      kind: 'none'
+    })
   })
 
   it('reports an older server without asking it a method it lacks', async () => {
     const call = server([], [])
-    await expect(readWslHostPeerDesktops(call, NOW)).resolves.toEqual({ kind: 'unsupported' })
-    expect(call).not.toHaveBeenCalledWith(ORCAD_PEER_DESKTOPS_METHOD, undefined)
+    await expect(readWslHostPeerDesktops(call, 'this-installation')).resolves.toEqual({
+      kind: 'unsupported'
+    })
+    expect(call).toHaveBeenCalledTimes(1)
   })
 
   it('throws on an answer it cannot read, so the teardown is refused', async () => {
-    await expect(readWslHostPeerDesktops(server('nope'), NOW)).rejects.toThrow()
+    await expect(readWslHostPeerDesktops(server('nope'), 'this-installation')).rejects.toThrow()
     const failing = vi.fn(async () => {
       throw new Error('timeout')
     })
-    await expect(readWslHostPeerDesktops(failing, NOW)).rejects.toThrow('timeout')
+    await expect(readWslHostPeerDesktops(failing, 'this-installation')).rejects.toThrow('timeout')
   })
 })

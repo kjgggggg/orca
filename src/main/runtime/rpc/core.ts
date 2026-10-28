@@ -20,10 +20,7 @@ import type {
 import type { OrchestrationCompatibilityEvidence } from '../../../shared/orchestration-compatibility-evidence'
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
 import type { RpcCallerIdentity } from './rpc-caller-identity'
-import type {
-  OrcadForkDesktopResult,
-  OrcadPeerDesktopsResult
-} from '../../../shared/orcad-peer-desktops-contract'
+import type { OrcadPeerDesktopsResult } from '../../../shared/orcad-peer-desktops-contract'
 import type { RpcBinarySender } from './rpc-binary-sender'
 import type { RpcMethodPermission } from './rpc-method-permission'
 import type {
@@ -149,11 +146,9 @@ export type RpcContext = {
   }
   // Authenticated runtime devices see which other desktops share this server.
   peerDesktops?: {
-    list(): OrcadPeerDesktopsResult
-    /** Revokes the caller's own desktop device and its phones. */
-    releaseSelf(): { released: boolean }
-    /** Splits the caller off the shared startup token into its own row. */
-    forkSelf(label: string): OrcadForkDesktopResult
+    list(callerClientInstanceId?: string): OrcadPeerDesktopsResult
+    /** Tags this socket with the caller's installation until it closes. */
+    declare(clientInstanceId: string): void
   }
   // Authenticated runtime devices may manage only their own delegated phones.
   delegatedMobileDevices?: {

@@ -4,10 +4,10 @@ import {
   DelegatedMobileDeviceSyncParamsSchema
 } from '../../../../shared/delegated-mobile-device-contract'
 import {
-  ORCAD_FORK_DESKTOP_METHOD,
+  ORCAD_DECLARE_CLIENT_METHOD,
   ORCAD_PEER_DESKTOPS_METHOD,
-  ORCAD_RELEASE_DESKTOP_METHOD,
-  OrcadForkDesktopParamsSchema
+  OrcadDeclareClientParamsSchema,
+  OrcadPeerDesktopsParamsSchema
 } from '../../../../shared/orcad-peer-desktops-contract'
 import { RegisterDeviceKeyParamsSchema } from '../../../../shared/device-key-registration-contract'
 import { REGISTER_DEVICE_KEY_METHOD } from '../../../../shared/device-key-capability'
@@ -52,38 +52,26 @@ export const PAIRING_METHODS = [
   }),
   defineMethod({
     name: ORCAD_PEER_DESKTOPS_METHOD,
-    // Paired desktops lack pairing-admin; they learn only names and presence, never credentials.
+    // Paired desktops lack pairing-admin; they learn only other desktops' names, never credentials.
     permission: 'workspace',
-    params: null,
-    handler: (_params, ctx) => {
-      if (!ctx.peerDesktops) {
-        throw new Error('runtime_device_required')
-      }
-      return ctx.peerDesktops.list()
-    }
-  }),
-  defineMethod({
-    name: ORCAD_FORK_DESKTOP_METHOD,
-    // Only ever the caller's own row: the transport names it, never a param.
-    permission: 'workspace',
-    params: OrcadForkDesktopParamsSchema,
+    params: OrcadPeerDesktopsParamsSchema,
     handler: (params, ctx) => {
       if (!ctx.peerDesktops) {
         throw new Error('runtime_device_required')
       }
-      return ctx.peerDesktops.forkSelf(params.label)
+      return ctx.peerDesktops.list(params.clientInstanceId)
     }
   }),
   defineMethod({
-    name: ORCAD_RELEASE_DESKTOP_METHOD,
-    // Only ever the caller's own device: the transport names it, never a param.
+    name: ORCAD_DECLARE_CLIENT_METHOD,
     permission: 'workspace',
-    params: null,
-    handler: (_params, ctx) => {
+    params: OrcadDeclareClientParamsSchema,
+    handler: (params, ctx) => {
       if (!ctx.peerDesktops) {
         throw new Error('runtime_device_required')
       }
-      return ctx.peerDesktops.releaseSelf()
+      ctx.peerDesktops.declare(params.clientInstanceId)
+      return {}
     }
   }),
   defineMethod({

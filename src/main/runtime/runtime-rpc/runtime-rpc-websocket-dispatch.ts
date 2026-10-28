@@ -254,18 +254,21 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
               }
             : undefined,
         mobileRelayHosts: this.mobileRelayHostCatalog ?? undefined,
+        // Only an authenticated desktop socket can say which installation it is.
         peerDesktops:
-          device.scope === 'runtime'
+          device.scope === 'runtime' && authenticatedSocket
             ? {
-                list: () => this.listPeerDesktops(device.deviceId),
-                releaseSelf: () => this.releaseOwnRuntimeDevice(device.deviceId),
-                // Mints a credential: only over the authenticated E2EE channel.
-                forkSelf: (label) => {
-                  if (!authenticatedSocket) {
-                    throw new Error('e2ee_channel_required')
-                  }
-                  return this.forkOwnRuntimeDevice(device.deviceId, label)
-                }
+                list: (clientInstanceId) =>
+                  this.declaredDesktopClients.peers(
+                    { connectionId: authenticatedSocket.connectionId, clientInstanceId },
+                    (deviceId) => this.deviceRegistry?.getDevice(deviceId) ?? null
+                  ),
+                declare: (clientInstanceId) =>
+                  this.declaredDesktopClients.declare(
+                    authenticatedSocket.connectionId,
+                    device.deviceId,
+                    clientInstanceId
+                  )
               }
             : undefined,
         delegatedMobileDevices:

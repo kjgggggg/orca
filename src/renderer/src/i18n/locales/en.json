@@ -6587,7 +6587,6 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "Removed from this Orca. The host keeps running for {{value0}}.",
-          "keptForOthersOwnDeviceKept": "Removed from this Orca. The host keeps running for {{value0}}, and may keep running for a while after that Orca is done with it.",
           "partial": "The host was removed, but something in the distro is still running: {{value0}}",
           "pending": "Orca didn’t remove the host yet: {{value0}} Remove it again to retry, or connect it to keep it."
         },

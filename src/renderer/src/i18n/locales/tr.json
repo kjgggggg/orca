@@ -6540,7 +6540,6 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "Bu Orca’dan kaldırıldı. Ana bilgisayar {{value0}} için çalışmaya devam ediyor.",
-          "keptForOthersOwnDeviceKept": "Bu Orca’dan kaldırıldı. Ana bilgisayar {{value0}} için çalışmaya devam ediyor ve o Orca onunla işini bitirdikten sonra bir süre daha çalışabilir.",
           "partial": "Ana makine kaldırıldı ancak dağıtım içinde hâlâ çalışan bir şey var: {{value0}}",
           "pending": "Orca ana makineyi henüz kaldırmadı: {{value0}} Tekrar denemek için yeniden kaldırın veya tutmak için bağlanın."
         },

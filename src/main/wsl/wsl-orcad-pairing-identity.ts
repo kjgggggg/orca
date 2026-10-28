@@ -13,7 +13,6 @@ import {
   type ManagedOrcadPairingRecovery
 } from '../managed-server/lifecycle/orcad-managed-tunnel-pairing-recovery'
 import type { WslOrcadLaunch } from './wsl-orcad-deploy'
-import { forkWslOrcadDesktopPairing } from './wsl-orcad-desktop-fork'
 
 /** The managed repair gate a refused enrolled token goes through, for one WSL host. */
 export type WslOrcadPairingRecovery = Omit<ManagedOrcadPairingRecovery, 'ensure'> & {
@@ -26,14 +25,13 @@ export async function resolveWslOrcadPairing(
   localPort: number,
   paired: PairingOffer | null,
   verifyIdentity = verifyWslOrcadIdentity,
-  recovery?: WslOrcadPairingRecovery,
-  forkDesktop: typeof forkWslOrcadDesktopPairing = forkWslOrcadDesktopPairing
+  recovery?: WslOrcadPairingRecovery
 ): Promise<string> {
   const verified = (offer: PairingOffer | null) =>
     verifyWslOrcadPairing(launch, localPort, offer, verifyIdentity)
   // First-time pairing has no enrolled token to repair.
   if (!recovery || !paired) {
-    return forkDesktop(await verified(paired), launch.readiness)
+    return verified(paired)
   }
   let pairingOffer = ''
   await buildWithPairingRepair(
@@ -48,8 +46,7 @@ export async function resolveWslOrcadPairing(
       pairingOffer = await verified(paired)
     }
   )
-  // A repair that landed back on the startup offer splits off again.
-  return forkDesktop(pairingOffer, launch.readiness)
+  return pairingOffer
 }
 
 async function verifyWslOrcadPairing(
