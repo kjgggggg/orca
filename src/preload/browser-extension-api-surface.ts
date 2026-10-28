@@ -134,7 +134,7 @@ export const BROWSER_EXTENSION_API_SURFACE: BrowserExtensionSurface = {
       detectLanguage: {}
     },
     events: ['onActivated', 'onCreated', 'onUpdated', 'onRemoved', 'onReplaced'],
-    constants: { TAB_ID_NONE: -1 }
+    constants: { TAB_ID_NONE: -1, MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND: 2 }
   },
   webNavigation: {
     permission: 'webNavigation',
