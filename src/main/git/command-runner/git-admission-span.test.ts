@@ -44,6 +44,7 @@ import {
   _gitAdmissionSnapshotForTests,
   _resetGitAdmissionForTests
 } from './git-subprocess-admission'
+import { setLocalGitRuntimeRouter } from './local-git-runtime-route'
 
 type ExecCallback = (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void
 
@@ -165,20 +166,26 @@ describe('git admission span coverage', () => {
     await expect(pending).resolves.toBe(child)
 
     expect(span.setAttribute).toHaveBeenCalledWith('git.queue_wait_ms', 37)
-    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
+    // Without the Git router the spawn is host Git as before, so no second resolution for the span.
+    expect(span.setAttribute).not.toHaveBeenCalledWith('git.runs_in', expect.anything())
     expect(span.end).not.toHaveBeenCalled()
     child.emit('close', 0, null)
     expect(span.end).toHaveBeenCalledOnce()
     expect(span.fail).not.toHaveBeenCalled()
   })
 
-  it('names which Git ran on the span of a spawn after the Windows environment is ready', async () => {
-    const child = mockChild()
-    spawnMock.mockReturnValue(child)
-    await expect(gitSpawnAfterWindowsEnvironmentReady(['status'], { cwd: '/repo' })).resolves.toBe(
-      child
-    )
-    expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
-    child.emit('close', 0, null)
+  it('names which Git ran on the span of a spawn, with the Git router on', async () => {
+    setLocalGitRuntimeRouter(() => undefined)
+    try {
+      const child = mockChild()
+      spawnMock.mockReturnValue(child)
+      await expect(
+        gitSpawnAfterWindowsEnvironmentReady(['status'], { cwd: '/repo' })
+      ).resolves.toBe(child)
+      expect(span.setAttribute).toHaveBeenCalledWith('git.runs_in', 'host')
+      child.emit('close', 0, null)
+    } finally {
+      setLocalGitRuntimeRouter(null)
+    }
   })
 })
