@@ -1090,6 +1090,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'gitlab.workItemByPath': WorkItemByPath,
   'gitlab.workItemDetails': WorkItemDetails,
   'host.gitBash.isAvailable': null,
+  'host.peerDesktops': null,
   'host.platform': null,
   'host.pwsh.isAvailable': null,
   'host.wsl.isAvailable': null,

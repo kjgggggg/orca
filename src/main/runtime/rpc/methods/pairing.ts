@@ -3,6 +3,7 @@ import {
   DELEGATED_MOBILE_DEVICE_SYNC_METHOD,
   DelegatedMobileDeviceSyncParamsSchema
 } from '../../../../shared/delegated-mobile-device-contract'
+import { ORCAD_PEER_DESKTOPS_METHOD } from '../../../../shared/orcad-peer-desktops-contract'
 import { RegisterDeviceKeyParamsSchema } from '../../../../shared/device-key-registration-contract'
 import { REGISTER_DEVICE_KEY_METHOD } from '../../../../shared/device-key-capability'
 import {
@@ -42,6 +43,18 @@ export const PAIRING_METHODS = [
         throw new Error('device_key_registration_unavailable')
       }
       return ctx.deviceSelf.registerDeviceKey(params)
+    }
+  }),
+  defineMethod({
+    name: ORCAD_PEER_DESKTOPS_METHOD,
+    // Paired desktops lack pairing-admin; they learn only names and presence, never credentials.
+    permission: 'workspace',
+    params: null,
+    handler: (_params, ctx) => {
+      if (!ctx.peerDesktops) {
+        throw new Error('runtime_device_required')
+      }
+      return ctx.peerDesktops.list()
     }
   }),
   defineMethod({

@@ -120,7 +120,7 @@ export class MobileSocketWiring {
     return removed
   }
 
-  private hasAuthenticatedSocket(deviceId: string): boolean {
+  hasAuthenticatedSocket(deviceId: string): boolean {
     return Array.from(this.authenticatedSockets.values()).some(
       (socket) => socket.device.deviceId === deviceId
     )

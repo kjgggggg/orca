@@ -6,6 +6,8 @@ import type {
   DelegatedPhone,
   DelegatedMobileDeviceSyncResult
 } from '../../../shared/delegated-mobile-device-contract'
+import type { OrcadPeerDesktopsResult } from '../../../shared/orcad-peer-desktops-contract'
+import { listPeerDesktops } from '../peer-desktops'
 import { RuntimeRpcRequestAdmission } from './runtime-rpc-request-admission'
 
 // Why: below dispatch so a caller-bound RPC context can revoke and mint mobile devices.
@@ -39,6 +41,12 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
     this.runtime.forgetClientNavigationState(deviceId)
     this.mobileSocketWiring?.terminateDeviceConnections(deviceId)
     return true
+  }
+
+  protected listPeerDesktops(callerDeviceId: string): OrcadPeerDesktopsResult {
+    return listPeerDesktops(this.deviceRegistry?.listDevices() ?? [], callerDeviceId, (deviceId) =>
+      Boolean(this.mobileSocketWiring?.hasAuthenticatedSocket(deviceId))
+    )
   }
 
   revokeRuntimeAccess(deviceId: string): boolean {
