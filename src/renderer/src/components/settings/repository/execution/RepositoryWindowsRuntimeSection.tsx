@@ -12,9 +12,10 @@ import { WslMoveRuntimeRow } from '../../../wsl-move/WslMoveRuntimeRow'
 import { WslDriveProjectGitRow } from '../../../wsl-drive-project/WslDriveProjectGitRow'
 import { useWslHostsEnabled } from '../../../sidebar/use-wsl-hosts-enabled'
 import { resolveProjectExecutionRuntime } from '../../../../../../shared/project-execution-runtime'
+import { isGitRepoKind } from '../../../../../../shared/repo-kind'
 
 type RepositoryWindowsRuntimeSectionProps = {
-  repo?: Pick<Repo, 'id' | 'path' | 'connectionId' | 'executionHostId'>
+  repo?: Pick<Repo, 'id' | 'path' | 'connectionId' | 'executionHostId' | 'kind'>
   repoDisplayName: string
   project: Project | null
   settings: Pick<GlobalSettings, 'localWindowsRuntimeDefault'> | null
@@ -89,7 +90,7 @@ export function RepositoryWindowsRuntimeSection({
           updateProject={updateProject}
         />
       )}
-      {wslHostsEnabled && repo && !wslCapabilitiesLoading ? (
+      {wslHostsEnabled && repo && isGitRepoKind(repo) && !wslCapabilitiesLoading ? (
         <WslDriveProjectGitRow
           projectId={project.id}
           repoPath={repo.path}
