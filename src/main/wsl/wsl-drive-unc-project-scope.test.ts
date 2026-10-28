@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { Repo } from '../../shared/repo-types'
+import type { WindowsDriveMount } from '../runtime/wsl-guest-drive-mountinfo'
 import {
   collectWslDriveUncScope,
   wslDriveUncWorktreeId,
@@ -10,6 +11,29 @@ import {
 function repo(id: string, path: string, extra: Partial<Repo> = {}): Repo {
   return { id, displayName: id, path, badgeColor: '', addedAt: 0, ...extra }
 }
+
+function folder(id: string, folderPath: string): FolderWorkspace {
+  return {
+    id,
+    projectGroupId: 'g1',
+    name: id,
+    folderPath,
+    linkedTask: null,
+    comment: '',
+    isArchived: false,
+    isUnread: false,
+    isPinned: false,
+    sortOrder: 0,
+    lastActivityAt: 0,
+    createdAt: 0,
+    updatedAt: 0
+  }
+}
+
+const DRIVES: WindowsDriveMount[] = [
+  { mountPoint: '/mnt/c', windowsRoot: 'C:\\' },
+  { mountPoint: '/mnt/d', windowsRoot: 'D:\\' }
+]
 
 describe('wslUncDrivePathToWindows', () => {
   it.each([
@@ -40,23 +64,16 @@ describe('collectWslDriveUncScope', () => {
       repo('already', String.raw`c:\SRC\dup`),
       repo('home', String.raw`\\wsl.localhost\Ubuntu\home\me\app`)
     ]
-    const folder: FolderWorkspace = {
-      id: 'f1',
-      projectGroupId: 'g1',
-      name: 'notes',
-      folderPath: String.raw`\\wsl.localhost\Ubuntu\mnt\d\notes`,
-      linkedTask: null,
-      comment: '',
-      isArchived: false,
-      isUnread: false,
-      isPinned: false,
-      sortOrder: 0,
-      lastActivityAt: 0,
-      createdAt: 0,
-      updatedAt: 0
-    }
     expect(
-      collectWslDriveUncScope({ repos, folderWorkspaces: [folder], projectGroups: [] }, 'Ubuntu')
+      collectWslDriveUncScope(
+        {
+          repos,
+          folderWorkspaces: [folder('f1', String.raw`\\wsl.localhost\Ubuntu\mnt\d\notes`)],
+          projectGroups: []
+        },
+        'Ubuntu',
+        DRIVES
+      )
     ).toEqual({
       repoIds: ['drive'],
       folderWorkspaceIds: ['f1'],
@@ -66,6 +83,68 @@ describe('collectWslDriveUncScope', () => {
         { kind: 'repo', id: 'dup', reason: 'duplicate-windows-project' }
       ]
     })
+  })
+})
+
+describe('collectWslDriveUncScope: one folder, one project', () => {
+  it('converts one UNC spelling of a drive folder and refuses the others as duplicates', () => {
+    const state = {
+      repos: [
+        repo('first', String.raw`\\wsl$\Ubuntu\mnt\c\src\app`),
+        repo('alias', '//wsl.localhost/Ubuntu/mnt/C/src/app/')
+      ],
+      folderWorkspaces: [
+        folder('f-first', String.raw`\\wsl.localhost\Ubuntu\mnt\d\notes`),
+        folder('f-alias', '//wsl$/ubuntu/mnt/D/notes'),
+        folder('f-drive', String.raw`D:\docs`),
+        folder('f-taken', String.raw`\\wsl.localhost\Ubuntu\mnt\d\docs`)
+      ],
+      projectGroups: []
+    }
+    expect(collectWslDriveUncScope(state, 'Ubuntu', DRIVES)).toEqual({
+      repoIds: ['first'],
+      folderWorkspaceIds: ['f-first'],
+      refused: [
+        { kind: 'repo', id: 'alias', reason: 'duplicate-windows-project' },
+        { kind: 'folder-workspace', id: 'f-alias', reason: 'duplicate-windows-project' },
+        { kind: 'folder-workspace', id: 'f-taken', reason: 'duplicate-windows-project' }
+      ]
+    })
+  })
+})
+
+describe('collectWslDriveUncScope: only real Windows drive folders', () => {
+  const state = {
+    repos: [
+      repo('drive', String.raw`\\wsl.localhost\Ubuntu\mnt\c\src\app`),
+      repo('ext4', String.raw`\\wsl.localhost\Ubuntu\mnt\e\src\app`),
+      repo('bind', String.raw`\\wsl.localhost\Ubuntu\mnt\c\shared\app`)
+    ],
+    folderWorkspaces: [folder('f-ext4', String.raw`\\wsl.localhost\Ubuntu\mnt\e\notes`)],
+    projectGroups: []
+  }
+
+  it('refuses a /mnt/<letter> folder the distro does not mount from that Windows drive', () => {
+    const mounts: WindowsDriveMount[] = [
+      ...DRIVES,
+      // A subfolder bind mount: its Windows folder is unknown, so it cannot be the drive path.
+      { mountPoint: '/mnt/c/shared', windowsRoot: null }
+    ]
+    expect(collectWslDriveUncScope(state, 'Ubuntu', mounts)).toEqual({
+      repoIds: ['drive'],
+      folderWorkspaceIds: [],
+      refused: [
+        { kind: 'repo', id: 'ext4', reason: 'not-windows-drive-mount' },
+        { kind: 'repo', id: 'bind', reason: 'not-windows-drive-mount' },
+        { kind: 'folder-workspace', id: 'f-ext4', reason: 'not-windows-drive-mount' }
+      ]
+    })
+  })
+
+  it('refuses a drive mounted under another letter, and everything when the mounts are unknown', () => {
+    const swapped: WindowsDriveMount[] = [{ mountPoint: '/mnt/c', windowsRoot: 'D:\\' }]
+    expect(collectWslDriveUncScope(state, 'Ubuntu', swapped).repoIds).toEqual([])
+    expect(collectWslDriveUncScope(state, 'Ubuntu', []).repoIds).toEqual([])
   })
 })
 

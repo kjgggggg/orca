@@ -12,14 +12,18 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 import { rewriteWorktreeIdPath } from '../../shared/worktree/id'
 import { wslUncPathToLinux } from '../../shared/wsl-paths'
 import { wslMoveRepoPaths } from '../persistence/moving-wsl-projects/wsl-move-scope'
+import type { WindowsDriveMount } from '../runtime/wsl-guest-drive-mountinfo'
+import { wslUncPathIsWindowsDriveFolder } from './wsl-drive-unc-mounts'
 
 export type WslDriveUncRefusal =
   /** Some of its paths are inside the distro or elsewhere, so no single drive path holds it. */
   | 'mixed-locations'
   /** It already runs on another host. */
   | 'not-local'
-  /** The drive path is already a project here; converting would make two rows for one folder. */
+  /** The drive path is already a project here, or another UNC spelling of it converts too. */
   | 'duplicate-windows-project'
+  /** The distro's `/mnt/<letter>` folder is not that Windows drive, so the drive path is another folder. */
+  | 'not-windows-drive-mount'
 
 export type WslDriveUncScope = {
   repoIds: string[]
@@ -47,10 +51,18 @@ export function wslUncDrivePathToWindows(path: string, distro: string): string |
 
 export function collectWslDriveUncScope(
   state: WslDriveUncScopeState,
-  distro: string
+  distro: string,
+  /** The distro's Windows-drive mounts (readWslDistroDriveMounts); none refuses every path. */
+  mounts: readonly WindowsDriveMount[]
 ): WslDriveUncScope {
   const scope: WslDriveUncScope = { repoIds: [], folderWorkspaceIds: [], refused: [] }
-  const localDrivePaths = new Set(
+  const onDriveMount = (path: string): boolean => {
+    const target = wslUncDrivePathToWindows(path, distro)
+    return target !== null && wslUncPathIsWindowsDriveFolder(path, distro, target, mounts)
+  }
+  // Drive paths already taken; each accepted conversion claims its own, so a second spelling of
+  // the same folder (`\\wsl$` vs `\\wsl.localhost`, `\mnt\C` vs `\mnt\c`) is a duplicate.
+  const claimedRepoPaths = new Set(
     state.repos
       .filter((repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID)
       .map((repo) => normalizeRuntimePathForComparison(repo.path))
@@ -60,34 +72,55 @@ export function collectWslDriveUncScope(
     if (!target) {
       continue
     }
+    const key = normalizeRuntimePathForComparison(target)
+    const paths = wslMoveRepoPaths(repo)
     const reason =
       getRepoExecutionHostId(repo) !== LOCAL_EXECUTION_HOST_ID
         ? 'not-local'
         : // A relative worktree base comes back joined onto the repo's UNC path.
-          !wslMoveRepoPaths(repo).every((path) => wslUncDrivePathToWindows(path, distro))
+          !paths.every((path) => wslUncDrivePathToWindows(path, distro))
           ? 'mixed-locations'
-          : localDrivePaths.has(normalizeRuntimePathForComparison(target))
-            ? 'duplicate-windows-project'
-            : null
+          : !paths.every(onDriveMount)
+            ? 'not-windows-drive-mount'
+            : claimedRepoPaths.has(key)
+              ? 'duplicate-windows-project'
+              : null
     if (reason) {
       scope.refused.push({ kind: 'repo', id: repo.id, reason })
     } else {
+      claimedRepoPaths.add(key)
       scope.repoIds.push(repo.id)
     }
   }
   const hostState = { repos: [...state.repos], projectGroups: [...state.projectGroups] }
+  // This row alone: another host may hold a folder workspace with the same id.
+  const isLocal = (workspace: FolderWorkspace): boolean =>
+    resolveFolderWorkspaceHost({ ...hostState, folderWorkspaces: [workspace] }, workspace.id)
+      .kind === 'local'
+  const claimedFolderPaths = new Set(
+    state.folderWorkspaces
+      .filter((workspace) => isLocal(workspace))
+      .map((workspace) => normalizeRuntimePathForComparison(workspace.folderPath))
+  )
   for (const workspace of state.folderWorkspaces) {
-    if (!wslUncDrivePathToWindows(workspace.folderPath, distro)) {
+    const target = wslUncDrivePathToWindows(workspace.folderPath, distro)
+    if (!target) {
       continue
     }
-    // This row alone: another host may hold a folder workspace with the same id.
-    const local =
-      resolveFolderWorkspaceHost({ ...hostState, folderWorkspaces: [workspace] }, workspace.id)
-        .kind === 'local'
-    if (local) {
-      scope.folderWorkspaceIds.push(workspace.id)
+    const key = normalizeRuntimePathForComparison(target)
+    // One path, so its mount check is the mixed-location check repos get.
+    const reason = !isLocal(workspace)
+      ? 'not-local'
+      : !onDriveMount(workspace.folderPath)
+        ? 'not-windows-drive-mount'
+        : claimedFolderPaths.has(key)
+          ? 'duplicate-windows-project'
+          : null
+    if (reason) {
+      scope.refused.push({ kind: 'folder-workspace', id: workspace.id, reason })
     } else {
-      scope.refused.push({ kind: 'folder-workspace', id: workspace.id, reason: 'not-local' })
+      claimedFolderPaths.add(key)
+      scope.folderWorkspaceIds.push(workspace.id)
     }
   }
   return scope
