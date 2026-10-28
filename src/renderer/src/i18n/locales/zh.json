@@ -5932,7 +5932,7 @@
           "advanced": "高级",
           "alsoDeleteRemoteHint": "永久删除远程 Git 工作树及其分支。此操作不可撤销。",
           "alsoForgetLocalHint": "仅从 Orca 中清除。远程文件、工作树和分支均不受影响。",
-          "wslHostEndsTerminalsUnlessShared": "从 Orca 中移除 {{value0}}。除非此计算机上的另一个 Orca 仍在使用它，否则还会结束其打开的终端，并停止该发行版中的 Orca 服务器。发行版中的文件不受影响。"
+          "wslHostEndsTerminalsUnlessShared": "从 Orca 中移除 {{value0}}。除非此计算机上打开的另一个 Orca 正在使用它，否则还会结束其打开的终端，并停止该发行版中的 Orca 服务器。发行版中的文件不受影响。"
         },
         "HostRenameDialog": {
           "1a2b3c4d5e": "重命名主机",

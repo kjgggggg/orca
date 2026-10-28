@@ -6182,7 +6182,7 @@
           "advanced": "Gelişmiş",
           "alsoDeleteRemoteHint": "Uzak Git worktree'lerini ve branch'lerini kalıcı olarak siler. Geri alınamaz.",
           "alsoForgetLocalHint": "Yalnızca Orca'dan temizler. Uzak dosyalar, worktree'ler ve branch'ler dokunulmadan bırakılır.",
-          "wslHostEndsTerminalsUnlessShared": "{{value0}} öğesini Orca'dan kaldırır. Bu bilgisayardaki başka bir Orca hâlâ kullanmıyorsa açık terminallerini de sonlandırır ve bu dağıtımdaki Orca sunucusunu durdurur. Dağıtımdaki dosyalar değiştirilmez."
+          "wslHostEndsTerminalsUnlessShared": "{{value0}} öğesini Orca'dan kaldırır. Bu bilgisayarda açık olan başka bir Orca onu kullanmıyorsa açık terminallerini de sonlandırır ve bu dağıtımdaki Orca sunucusunu durdurur. Dağıtımdaki dosyalar değiştirilmez."
         },
         "HostRenameDialog": {
           "1a2b3c4d5e": "Host'u yeniden adlandır",

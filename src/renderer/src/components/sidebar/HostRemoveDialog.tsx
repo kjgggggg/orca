@@ -183,7 +183,7 @@ export function HostRemoveDialog({
     target.kind === 'wsl'
       ? translate(
           'auto.components.sidebar.HostRemoveDialog.wslHostEndsTerminalsUnlessShared',
-          'Removes {{value0}} from Orca. Unless another Orca on this computer still uses it, this also ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched.',
+          'Removes {{value0}} from Orca. Unless another Orca that’s open on this computer is using it, this also ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched.',
           { value0: label }
         )
       : target.kind === 'runtime'

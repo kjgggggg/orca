@@ -6229,7 +6229,7 @@
           "advanced": "Advanced",
           "alsoDeleteRemoteHint": "Permanently deletes the remote Git worktrees and their branches. Cannot be undone.",
           "alsoForgetLocalHint": "Clears them from Orca only. Remote files, worktrees, and branches are left untouched.",
-          "wslHostEndsTerminalsUnlessShared": "Removes {{value0}} from Orca. Unless another Orca on this computer still uses it, this also ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched."
+          "wslHostEndsTerminalsUnlessShared": "Removes {{value0}} from Orca. Unless another Orca that’s open on this computer is using it, this also ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched."
         },
         "HostRenameDialog": {
           "1a2b3c4d5e": "Rename host",

@@ -5932,7 +5932,7 @@
           "advanced": "詳細設定",
           "alsoDeleteRemoteHint": "リモートの Git ワークツリーとそのブランチを完全に削除します。この操作は取り消せません。",
           "alsoForgetLocalHint": "Orca からのみ削除します。リモートのファイル、ワークツリー、ブランチはそのまま残ります。",
-          "wslHostEndsTerminalsUnlessShared": "Orca から {{value0}} を削除します。このコンピューター上の別の Orca がまだ使用していない場合は、開いているターミナルも終了し、そのディストリビューション内の Orca サーバーを停止します。ディストリビューション内のファイルは変更されません。"
+          "wslHostEndsTerminalsUnlessShared": "Orca から {{value0}} を削除します。このコンピューターで開いている別の Orca が使用していない場合は、開いているターミナルも終了し、そのディストリビューション内の Orca サーバーを停止します。ディストリビューション内のファイルは変更されません。"
         },
         "HostRenameDialog": {
           "1a2b3c4d5e": "ホスト名を変更",
