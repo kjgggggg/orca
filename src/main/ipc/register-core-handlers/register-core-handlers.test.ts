@@ -636,7 +636,7 @@ describe('registerCoreHandlers', () => {
     })
     expect(registerEmulatorFrameStreamHandlersMock).toHaveBeenCalled()
     expect(registerEmulatorVideoStreamHandlersMock).toHaveBeenCalled()
-    expect(registerFilesystemHandlersMock).toHaveBeenCalledWith(store)
+    expect(registerFilesystemHandlersMock).toHaveBeenCalledWith(store, undefined)
     expect(registerRuntimeHandlersMock).toHaveBeenCalledWith(runtime)
     expect(registerRuntimeEnvironmentHandlersMock).toHaveBeenCalledWith(store)
     expect(registerEphemeralVmHandlersMock).toHaveBeenCalledWith(store, undefined)
