@@ -19124,6 +19124,7 @@
       "useHereConfirm": "이 컴퓨터에서 사용",
       "useHereSuperseded": "이후 {{distro}} 호스트로의 이동에 이 프로젝트가 포함되어 있습니다. 그 이동을 먼저 되돌리세요.",
       "useHereMoveRunning": "{{distro}} 호스트로의 이동이 아직 진행 중입니다. 끝난 후 다시 시도하세요.",
+      "useHereHostKeptForPeers": "{{project}}이(가) {{distro}} 호스트로 이동했으며, 해당 호스트는 다른 Orca를 위해 계속 실행 중입니다. 여기서 다시 사용하려면 호스트를 다시 추가하세요.",
       "useHereHostUnreachable": "{{distro}} 호스트가 응답하지 않아 Orca가 이 프로젝트의 호스트 사본을 중지할 수 없으며, 그 에이전트가 아직 실행 중일 수 있습니다. 설정에서 호스트를 연결하거나 제거한 후 다시 시도하세요.",
       "useHereHostStillRunning": "{{distro}} 호스트에 있는 이 프로젝트의 사본에서 아직 터미널이 실행 중이라 에이전트가 두 번 실행될 수 있습니다. 잠시 후 다시 시도하세요.",
       "useHereFailed": "이 프로젝트를 이 컴퓨터로 되돌리지 못했습니다.",

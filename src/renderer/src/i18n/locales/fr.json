@@ -19195,6 +19195,7 @@
       "useHereConfirm": "Utiliser sur cet ordinateur",
       "useHereSuperseded": "Un déplacement ultérieur vers l'hôte {{distro}} inclut ce projet. Ramenez d'abord celui-là.",
       "useHereMoveRunning": "Un déplacement vers l'hôte {{distro}} est encore en cours. Réessayez une fois terminé.",
+      "useHereHostKeptForPeers": "{{project}} a été déplacé vers l'hôte {{distro}}, qui reste actif pour un autre Orca. Ajoutez de nouveau l'hôte pour l'utiliser ici.",
       "useHereHostUnreachable": "L'hôte {{distro}} ne répond pas : Orca ne peut pas arrêter sa copie de ce projet, et ses agents y tournent peut-être encore. Connectez l'hôte dans les Réglages, ou supprimez-le, puis réessayez.",
       "useHereHostStillRunning": "La copie de ce projet sur l'hôte {{distro}} a encore des terminaux en cours : ses agents pourraient tourner deux fois. Patientez un instant, puis réessayez.",
       "useHereFailed": "Impossible de ramener ce projet sur cet ordinateur.",

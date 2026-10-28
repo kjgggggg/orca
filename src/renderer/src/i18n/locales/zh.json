@@ -19125,6 +19125,7 @@
       "useHereConfirm": "在此电脑上使用",
       "useHereSuperseded": "之后一次移动到 {{distro}} 主机的操作包含此项目。请先将那次移动恢复。",
       "useHereMoveRunning": "移动到 {{distro}} 主机的操作仍在进行。请在其结束后重试。",
+      "useHereHostKeptForPeers": "{{project}} 已移到 {{distro}} 主机，该主机仍在为另一个 Orca 运行。重新添加该主机即可在此处再次使用它。",
       "useHereHostUnreachable": "{{distro}} 主机没有响应，Orca 无法停止它上面的此项目副本，其代理可能仍在运行。请在设置中连接或移除该主机，然后重试。",
       "useHereHostStillRunning": "{{distro}} 主机上的此项目副本仍有终端在运行，其代理可能会运行两次。请稍候再试。",
       "useHereFailed": "无法将此项目恢复到此电脑。",
