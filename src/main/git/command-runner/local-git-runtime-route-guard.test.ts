@@ -14,18 +14,24 @@ const MAIN_DIR = join(__dirname, '..', '..')
 const REPO_ROOT = join(MAIN_DIR, '..', '..')
 
 const COMMENT_LINE = /^\s*(\*|\/\/|\/\*)/
+const HOST_GIT = 'hostGit: true'
 
-/** Files whose code, not only a comment, contains `text`. */
-function sourcesMentioning(text: string): string[] {
-  return readdirSync(MAIN_DIR, { recursive: true, encoding: 'utf8' })
+let hostGitSources: string[] | null = null
+
+/** Files whose code, not only a comment, sets `hostGit: true`; one read of src/main per run. */
+function hostGitCallSources(): string[] {
+  hostGitSources ??= readdirSync(MAIN_DIR, { recursive: true, encoding: 'utf8' })
     .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT.test(file))
     .map((file) => join(MAIN_DIR, file))
-    .filter((file) =>
-      readFileSync(file, 'utf8')
-        .split('\n')
-        .some((line) => line.includes(text) && !COMMENT_LINE.test(line))
-    )
+    .filter((file) => {
+      const source = readFileSync(file, 'utf8')
+      return (
+        source.includes(HOST_GIT) &&
+        source.split('\n').some((line) => line.includes(HOST_GIT) && !COMMENT_LINE.test(line))
+      )
+    })
     .map((file) => relative(REPO_ROOT, file).replaceAll('\\', '/'))
+  return hostGitSources
 }
 
 const HOST_ONLY_ENTRIES = new Set<string>()
@@ -50,7 +56,7 @@ describe('local Git runtime routing guard', () => {
   })
 
   it('has a reason above every deliberate host-Git call', () => {
-    const files = sourcesMentioning('hostGit: true')
+    const files = hostGitCallSources()
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
@@ -66,7 +72,7 @@ describe('local Git runtime routing guard', () => {
   })
 
   it('keeps deliberate host Git to the calls that run before a project owns the folder', () => {
-    expect(sourcesMentioning('hostGit: true').sort()).toEqual([
+    expect([...hostGitCallSources()].sort()).toEqual([
       // Repo detection, read-only.
       'src/main/git/repo-detection-command.ts',
       // Clone and init make a new repo.
