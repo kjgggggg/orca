@@ -50,7 +50,12 @@ describe('newWindowsDriveProjectRuntimePreference', () => {
   it('accepts worktrees Windows Git made', () => {
     expect(
       newWindowsDriveProjectRuntimePreference(
-        args({ readWorktreeLinks: () => ['C:/src/feature/.git'] })
+        args({
+          readWorktreeLinks: () => [
+            'C:/src/feature/.git',
+            '//wsl.localhost/Ubuntu/home/me/fix/.git'
+          ]
+        })
       )
     ).not.toBeNull()
   })

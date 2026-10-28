@@ -14,6 +14,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Project } from '../../shared/project-types'
 import { isFolderRepo } from '../../shared/repo-kind'
 import type { Repo } from '../../shared/repo-types'
+import { isForeignLink } from '../git/worktree-prune-guard'
 import { wslHostsGateOpen } from './wsl-host-gate'
 
 export type NewWindowsDriveProjectDefaultArgs = {
@@ -42,7 +43,7 @@ export function newWindowsDriveProjectRuntimePreference(
   }
   // WSL Git wrote Linux-path links that Windows Git can't follow; the preflight refuses these too.
   const links = args.readWorktreeLinks(repo.path)
-  if (!links || links.some((link) => link.startsWith('/'))) {
+  if (!links || links.some((link) => isForeignLink(link, false))) {
     return null
   }
   // Pinned like a converted project, so a later global change can't silently switch its Git.
