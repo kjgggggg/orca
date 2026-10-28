@@ -9,8 +9,7 @@ function device(overrides: Partial<DeviceEntry> & Pick<DeviceEntry, 'deviceId'>)
 describe('listPeerDesktops', () => {
   it('lists other desktops, with presence, and nothing else', () => {
     const devices = [
-      device({ deviceId: 'me', forkedFrom: 'me-token' }),
-      device({ deviceId: 'me-token' }),
+      device({ deviceId: 'me' }),
       device({ deviceId: 'dev', name: 'Orca Dev' }),
       device({ deviceId: 'beta', name: 'Orca Beta', lastSeenAt: 9 }),
       // A phone row is left out by its scope, even one that looks like a desktop otherwise.
@@ -27,19 +26,42 @@ describe('listPeerDesktops', () => {
     })
   })
 
-  it("leaves out an older enrollment of the caller's own installation", () => {
+  it('counts sibling forks of one token row as different desktops', () => {
+    // Two installations paired through one code: their forks share the token row's fingerprint.
     const devices = [
-      device({ deviceId: 'me', callerFingerprint: 'install-a' }),
-      device({ deviceId: 'me-before-readd', callerFingerprint: 'install-a', lastSeenAt: 9 }),
-      device({ deviceId: 'dev', callerFingerprint: 'install-b' })
+      device({ deviceId: 'token', lastSeenAt: 3 }),
+      device({
+        deviceId: 'a',
+        forkedFrom: 'token',
+        callerFingerprint: 'f',
+        devicePublicKeyB64: 'ka'
+      }),
+      device({
+        deviceId: 'b',
+        forkedFrom: 'token',
+        callerFingerprint: 'f',
+        devicePublicKeyB64: 'kb'
+      })
+    ]
+    expect(listPeerDesktops(devices, 'a', () => false).peers.map((peer) => peer.name)).toEqual([
+      'token',
+      'b'
+    ])
+    expect(listPeerDesktops(devices, 'b', () => false).peers.map((peer) => peer.name)).toEqual([
+      'token',
+      'a'
+    ])
+  })
+
+  it('leaves out an older enrollment of the same installation, by its device key', () => {
+    // Re-added with a new token: a new row, the same device key.
+    const devices = [
+      device({ deviceId: 'before-readd', devicePublicKeyB64: 'k', lastSeenAt: 9 }),
+      device({ deviceId: 'me', devicePublicKeyB64: 'k', callerFingerprint: 'new' }),
+      device({ deviceId: 'dev', devicePublicKeyB64: 'other' })
     ]
     expect(listPeerDesktops(devices, 'me', () => false).peers.map((peer) => peer.name)).toEqual([
       'dev'
     ])
-  })
-
-  it("leaves out a row forked from the caller's own", () => {
-    const devices = [device({ deviceId: 'old' }), device({ deviceId: 'new', forkedFrom: 'old' })]
-    expect(listPeerDesktops(devices, 'old', () => false)).toEqual({ peers: [] })
   })
 })

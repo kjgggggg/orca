@@ -24,8 +24,8 @@ export type WslHostTerminalLeftover = { handle: string; worktreeId: string; reas
 export type WslHostServerStopSteps = {
   /** Which other desktops share this server; throws when it can't say. */
   peerDesktops: () => Promise<WslHostPeerDesktops>
-  /** On a shared server: revoke this desktop's own device so peers stop counting it. */
-  releaseFromPeers: () => Promise<void>
+  /** Revoke this desktop's own device on the server, so no leftover row of ours counts as a peer. */
+  releaseOwnDevice: () => Promise<void>
   /** Closes every terminal orcad runs; returns the ones that refused instead of stopping. */
   endTerminals: () => Promise<WslHostTerminalLeftover[]>
   census: () => Promise<OrcadTerminalCensus>
@@ -46,6 +46,16 @@ function describeLeftovers(leftovers: readonly WslHostTerminalLeftover[]): strin
     .join('; ')
 }
 
+async function releaseOwnDevice(steps: WslHostServerStopSteps): Promise<boolean> {
+  try {
+    await steps.releaseOwnDevice()
+    return true
+  } catch (error) {
+    console.warn('[wsl-hosts] Could not release this Orca from the WSL host:', error)
+    return false
+  }
+}
+
 export async function stopWslHostServer(steps: WslHostServerStopSteps): Promise<WslHostServerStop> {
   const sleep = steps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
   const problems: string[] = []
@@ -64,12 +74,13 @@ export async function stopWslHostServer(steps: WslHostServerStopSteps): Promise<
     }
   }
   if (peers.kind === 'shared') {
-    // Why: a leftover recent row of ours would keep the server for a peer's own later Remove.
-    await steps.releaseFromPeers().catch((error: unknown) => {
-      console.warn('[wsl-hosts] Could not release this Orca from the shared WSL host:', error)
-    })
+    const released = await releaseOwnDevice(steps)
     await steps.closeBridge()
-    return { stopped: true, keptForOtherDesktops: peers.names }
+    return {
+      stopped: true,
+      keptForOtherDesktops: peers.names,
+      ...(released ? {} : { ownDeviceKept: true as const })
+    }
   }
   if (peers.kind === 'unsupported') {
     console.warn(
@@ -89,6 +100,11 @@ export async function stopWslHostServer(steps: WslHostServerStopSteps): Promise<
     census = await steps.census()
   }
   const servingRuntimeId = await steps.servingRuntimeId().catch(() => null)
+  // Last call over the bridge: a server this Remove may not stop (or a later Add restarts) must not
+  // keep a recent row of ours, which a peer's Remove would read as a desktop still using it.
+  if (leftovers.length === 0 && census.liveSessions === 0) {
+    await releaseOwnDevice(steps)
+  }
   await steps.closeBridge()
   if (leftovers.length > 0) {
     provenLive = true
@@ -144,12 +160,12 @@ export function wslHostRuntimeStopSteps(
   environmentId: string
 ): Pick<
   WslHostServerStopSteps,
-  'peerDesktops' | 'releaseFromPeers' | 'endTerminals' | 'census' | 'servingRuntimeId'
+  'peerDesktops' | 'releaseOwnDevice' | 'endTerminals' | 'census' | 'servingRuntimeId'
 > {
   return {
     peerDesktops: () =>
       readWslHostPeerDesktops((method, params) => access.call(environmentId, method, params)),
-    releaseFromPeers: async () => {
+    releaseOwnDevice: async () => {
       await access.call(environmentId, ORCAD_RELEASE_DESKTOP_METHOD, undefined)
     },
     endTerminals: async () => {

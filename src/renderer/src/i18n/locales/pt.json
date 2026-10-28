@@ -11365,6 +11365,7 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "Removido deste Orca. O host continua em execução para {{value0}}.",
+          "keptForOthersOwnDeviceKept": "Removido deste Orca. O host continua em execução para {{value0}} e pode continuar por um tempo depois que esse Orca terminar de usá-lo.",
           "partial": "O host foi removido, mas algo na distribuição ainda está em execução: {{value0}}",
           "pending": "O Orca ainda não removeu o host: {{value0}} Remova-o novamente para tentar de novo, ou conecte-o para mantê-lo."
         },

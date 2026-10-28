@@ -23,8 +23,8 @@ function steps(overrides: Partial<WslHostServerStopSteps> = {}) {
   const order: string[] = []
   const all: WslHostServerStopSteps = {
     peerDesktops: vi.fn(async (): Promise<WslHostPeerDesktops> => ({ kind: 'none' })),
-    releaseFromPeers: vi.fn(async () => {
-      order.push('releaseFromPeers')
+    releaseOwnDevice: vi.fn(async () => {
+      order.push('releaseOwnDevice')
     }),
     endTerminals: vi.fn(async () => {
       order.push('endTerminals')
@@ -55,10 +55,12 @@ describe('stopWslHostServer', () => {
   it('closes terminals, proves none remain, names the serving orcad, then retires it', async () => {
     const { all, order } = steps()
     await expect(stopWslHostServer(all)).resolves.toEqual({ stopped: true })
+    // Released as the last call over the bridge, so no row of ours outlives this Remove.
     expect(order).toEqual([
       'endTerminals',
       'census',
       'servingRuntimeId',
+      'releaseOwnDevice',
       'closeBridge',
       'decommission'
     ])
@@ -77,7 +79,7 @@ describe('stopWslHostServer', () => {
       keptForOtherDesktops: ['Orca Dev']
     })
     // Released first, so a peer's later Remove doesn't count this desktop as still using it.
-    expect(order).toEqual(['releaseFromPeers', 'closeBridge'])
+    expect(order).toEqual(['releaseOwnDevice', 'closeBridge'])
   })
 
   it('still keeps the server and lets go when the release itself fails', async () => {
@@ -87,11 +89,15 @@ describe('stopWslHostServer', () => {
         kind: 'shared',
         names: ['Orca Dev']
       })),
-      releaseFromPeers: vi.fn(async () => {
+      releaseOwnDevice: vi.fn(async () => {
         throw new Error('timeout')
       })
     })
-    await expect(stopWslHostServer(all)).resolves.toMatchObject({ stopped: true })
+    await expect(stopWslHostServer(all)).resolves.toEqual({
+      stopped: true,
+      keptForOtherDesktops: ['Orca Dev'],
+      ownDeviceKept: true
+    })
     expect(order).toEqual(['closeBridge'])
     warn.mockRestore()
   })
@@ -119,6 +125,12 @@ describe('stopWslHostServer', () => {
     expect(order).toContain('decommission')
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('predates the shared-host check'))
     warn.mockRestore()
+  })
+
+  it('keeps its device while terminals still run, so a retry can still reach the server', async () => {
+    const { all, order } = steps({ census: vi.fn(async () => census(2)) })
+    await stopWslHostServer(all)
+    expect(order).not.toContain('releaseOwnDevice')
   })
 
   it('names each terminal that refused, and still asks the server to stop', async () => {

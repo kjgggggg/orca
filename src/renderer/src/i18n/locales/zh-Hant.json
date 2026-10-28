@@ -6529,6 +6529,7 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "已從此 Orca 移除。該主機將繼續為 {{value0}} 執行。",
+          "keptForOthersOwnDeviceKept": "已從此 Orca 移除。該主機將繼續為 {{value0}} 執行，並且在該 Orca 用完後可能還會執行一段時間。",
           "partial": "主機已被移除，但發行版中仍有內容在執行：{{value0}}",
           "pending": "Orca 尚未移除此主機：{{value0}}。請再次移除以重試，或連線至此主機以保留它。"
         },

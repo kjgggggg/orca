@@ -6237,6 +6237,7 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "Se quitó de este Orca. El host sigue en marcha para {{value0}}.",
+          "keptForOthersOwnDeviceKept": "Se quitó de este Orca. El host sigue en marcha para {{value0}} y puede seguir así un tiempo después de que ese Orca deje de usarlo.",
           "partial": "Se quitó el host, pero algo en la distro sigue en ejecución: {{value0}}",
           "pending": "Orca aún no eliminó el host: {{value0}} Vuelve a eliminarlo para reintentarlo o conéctalo para conservarlo."
         },

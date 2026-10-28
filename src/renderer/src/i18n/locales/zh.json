@@ -6235,6 +6235,7 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "已从此 Orca 中移除。该主机将继续为 {{value0}} 运行。",
+          "keptForOthersOwnDeviceKept": "已从此 Orca 中移除。该主机将继续为 {{value0}} 运行，并且在该 Orca 用完后可能还会运行一段时间。",
           "partial": "主机已被移除，但发行版中仍有内容在运行：{{value0}}",
           "pending": "Orca 尚未移除该主机：{{value0}} 可再次移除以重试，或连接以保留它。"
         },

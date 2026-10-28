@@ -61,6 +61,14 @@ describe('removeWslHost', () => {
     expect(mocks.warning).not.toHaveBeenCalled()
   })
 
+  it('adds that the host may outlive the other Orca when this one could not let go of it', async () => {
+    stubApi({ stopped: true, keptForOtherDesktops: ['Orca Dev'], ownDeviceKept: true })
+    await removeWslHost('wsl:ubuntu')
+    expect(mocks.info).toHaveBeenCalledWith(
+      'Removed from this Orca. The host keeps running for Orca Dev, and may keep running for a while after that Orca is done with it.'
+    )
+  })
+
   it('removes quietly when the server, its daemon and terminals all ended', async () => {
     const remove = stubApi({ stopped: true })
     await removeWslHost('wsl:ubuntu')

@@ -63,8 +63,11 @@ export type WslHostCapability = {
  * listed with its stop pending, so Remove can retry; older mains removed it anyway.
  */
 export type WslHostServerStop =
-  /** `keptForOtherDesktops`: another Orca shares the server, so only this desktop let go of it. */
-  | { stopped: true; keptForOtherDesktops?: string[] }
+  /**
+   * `keptForOtherDesktops`: another Orca shares the server, so only this desktop let go of it.
+   * `ownDeviceKept`: this desktop's device stayed on it, so the server may outlive that Orca.
+   */
+  | { stopped: true; keptForOtherDesktops?: string[]; ownDeviceKept?: true }
   | { stopped: false; reason: string; verdict?: 'live' | 'unverifiable'; kept?: boolean }
 
 export type WslHostAddFailureKind =

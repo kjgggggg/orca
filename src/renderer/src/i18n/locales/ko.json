@@ -6235,6 +6235,7 @@
         },
         "wslHostRemoval": {
           "keptForOthers": "이 Orca에서 제거했습니다. 호스트는 {{value0}}을(를) 위해 계속 실행됩니다.",
+          "keptForOthersOwnDeviceKept": "이 Orca에서 제거했습니다. 호스트는 {{value0}}을(를) 위해 계속 실행되며, 해당 Orca가 사용을 마친 뒤에도 한동안 실행될 수 있습니다.",
           "partial": "호스트는 제거되었지만 배포판에서 아직 실행 중인 항목이 있습니다: {{value0}}",
           "pending": "Orca가 아직 호스트를 제거하지 않았습니다: {{value0}} 다시 시도하려면 다시 제거하고, 유지하려면 연결하세요."
         },
