@@ -10624,7 +10624,7 @@
           "advanced": "Avançado",
           "alsoDeleteRemoteHint": "Exclui permanentemente as worktrees Git remotas e suas branches. Não pode ser desfeito.",
           "alsoForgetLocalHint": "Limpa-os apenas do Orca. Os arquivos, worktrees e branches remotos permanecem intocados.",
-          "wslHostEndsTerminals": "Remove {{value0}} do Orca, encerra os terminais abertos e interrompe o servidor Orca nessa distribuição. Os arquivos da distribuição não são alterados."
+          "wslHostEndsTerminalsUnlessShared": "Remove {{value0}} do Orca. A menos que outro Orca neste computador ainda o use, também encerra seus terminais abertos e para o servidor do Orca nessa distro. Os arquivos da distro não são alterados."
         },
         "AddRepoSteps": {
           "569326d9cc": "Escolher pasta",
@@ -11364,6 +11364,7 @@
           "removalPending": "A remoção não foi concluída"
         },
         "wslHostRemoval": {
+          "keptForOthers": "Removido deste Orca. O host continua em execução para {{value0}}.",
           "partial": "O host foi removido, mas algo na distribuição ainda está em execução: {{value0}}",
           "pending": "O Orca ainda não removeu o host: {{value0}} Remova-o novamente para tentar de novo, ou conecte-o para mantê-lo."
         },

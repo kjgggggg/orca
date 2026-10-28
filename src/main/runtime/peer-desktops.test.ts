@@ -13,7 +13,8 @@ describe('listPeerDesktops', () => {
       device({ deviceId: 'me-token' }),
       device({ deviceId: 'dev', name: 'Orca Dev' }),
       device({ deviceId: 'beta', name: 'Orca Beta', lastSeenAt: 9 }),
-      device({ deviceId: 'phone', scope: 'mobile' }),
+      // A phone row is left out by its scope, even one that looks like a desktop otherwise.
+      device({ deviceId: 'phone', name: 'Orca Phone', scope: 'mobile', lastSeenAt: 99 }),
       device({ deviceId: 'relayed', parentDeviceId: 'dev' }),
       device({ deviceId: 'browser', ephemeral: true }),
       device({ deviceId: 'unscanned', lastSeenAt: 0 })
@@ -24,6 +25,17 @@ describe('listPeerDesktops', () => {
         { name: 'Orca Beta', connected: false, lastSeenAt: 9 }
       ]
     })
+  })
+
+  it("leaves out an older enrollment of the caller's own installation", () => {
+    const devices = [
+      device({ deviceId: 'me', callerFingerprint: 'install-a' }),
+      device({ deviceId: 'me-before-readd', callerFingerprint: 'install-a', lastSeenAt: 9 }),
+      device({ deviceId: 'dev', callerFingerprint: 'install-b' })
+    ]
+    expect(listPeerDesktops(devices, 'me', () => false).peers.map((peer) => peer.name)).toEqual([
+      'dev'
+    ])
   })
 
   it("leaves out a row forked from the caller's own", () => {

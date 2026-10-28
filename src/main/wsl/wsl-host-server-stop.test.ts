@@ -23,6 +23,9 @@ function steps(overrides: Partial<WslHostServerStopSteps> = {}) {
   const order: string[] = []
   const all: WslHostServerStopSteps = {
     peerDesktops: vi.fn(async (): Promise<WslHostPeerDesktops> => ({ kind: 'none' })),
+    releaseFromPeers: vi.fn(async () => {
+      order.push('releaseFromPeers')
+    }),
     endTerminals: vi.fn(async () => {
       order.push('endTerminals')
       return []
@@ -73,7 +76,24 @@ describe('stopWslHostServer', () => {
       stopped: true,
       keptForOtherDesktops: ['Orca Dev']
     })
+    // Released first, so a peer's later Remove doesn't count this desktop as still using it.
+    expect(order).toEqual(['releaseFromPeers', 'closeBridge'])
+  })
+
+  it('still keeps the server and lets go when the release itself fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { all, order } = steps({
+      peerDesktops: vi.fn(async (): Promise<WslHostPeerDesktops> => ({
+        kind: 'shared',
+        names: ['Orca Dev']
+      })),
+      releaseFromPeers: vi.fn(async () => {
+        throw new Error('timeout')
+      })
+    })
+    await expect(stopWslHostServer(all)).resolves.toMatchObject({ stopped: true })
     expect(order).toEqual(['closeBridge'])
+    warn.mockRestore()
   })
 
   it('refuses the teardown when the server cannot say who else uses it', async () => {

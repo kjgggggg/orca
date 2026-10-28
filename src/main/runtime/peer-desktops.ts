@@ -17,6 +17,9 @@ export function listPeerDesktops(
           // Its own pre-migration token row is the same desktop, not another one.
           device.deviceId !== caller?.forkedFrom &&
           device.forkedFrom !== callerDeviceId &&
+          // Another row of this same installation (an older enrollment) is not another desktop.
+          (caller?.callerFingerprint === undefined ||
+            device.callerFingerprint !== caller.callerFingerprint) &&
           device.parentDeviceId === undefined &&
           !device.ephemeral &&
           device.lastSeenAt > 0

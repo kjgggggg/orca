@@ -147,6 +147,8 @@ export type RpcContext = {
   // Authenticated runtime devices see which other desktops share this server.
   peerDesktops?: {
     list(): OrcadPeerDesktopsResult
+    /** Revokes the caller's own desktop device and its phones. */
+    releaseSelf(): { released: boolean }
   }
   // Authenticated runtime devices may manage only their own delegated phones.
   delegatedMobileDevices?: {

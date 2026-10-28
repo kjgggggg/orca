@@ -1093,6 +1093,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'host.peerDesktops': null,
   'host.platform': null,
   'host.pwsh.isAvailable': null,
+  'host.releaseDesktop': null,
   'host.wsl.isAvailable': null,
   'host.wsl.listDistros': null,
   'hostedReview.create': HostedReviewCreate,

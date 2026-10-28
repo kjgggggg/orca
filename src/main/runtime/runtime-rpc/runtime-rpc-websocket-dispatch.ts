@@ -256,7 +256,10 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         mobileRelayHosts: this.mobileRelayHostCatalog ?? undefined,
         peerDesktops:
           device.scope === 'runtime'
-            ? { list: () => this.listPeerDesktops(device.deviceId) }
+            ? {
+                list: () => this.listPeerDesktops(device.deviceId),
+                releaseSelf: () => this.releaseOwnRuntimeDevice(device.deviceId)
+              }
             : undefined,
         delegatedMobileDevices:
           device.scope === 'runtime'

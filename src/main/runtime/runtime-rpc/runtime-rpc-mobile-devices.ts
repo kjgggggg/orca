@@ -10,6 +10,8 @@ import type { OrcadPeerDesktopsResult } from '../../../shared/orcad-peer-desktop
 import { listPeerDesktops } from '../peer-desktops'
 import { RuntimeRpcRequestAdmission } from './runtime-rpc-request-admission'
 
+const RELEASED_DEVICE_DISCONNECT_MS = 1_000
+
 // Why: below dispatch so a caller-bound RPC context can revoke and mint mobile devices.
 export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
   private onPushUnregisterQueued?: () => void
@@ -50,6 +52,27 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
   }
 
   revokeRuntimeAccess(deviceId: string): boolean {
+    if (!this.removeRuntimeDevice(deviceId)) {
+      return false
+    }
+    this.mobileSocketWiring?.terminateDeviceConnections(deviceId)
+    return true
+  }
+
+  /** A desktop leaving a server other desktops share: it and its phones stop counting as a peer. */
+  protected releaseOwnRuntimeDevice(deviceId: string): { released: boolean } {
+    if (!this.removeRuntimeDevice(deviceId)) {
+      return { released: false }
+    }
+    // Why later: the caller's own socket still carries this answer.
+    setTimeout(
+      () => this.mobileSocketWiring?.terminateDeviceConnections(deviceId),
+      RELEASED_DEVICE_DISCONNECT_MS
+    ).unref?.()
+    return { released: true }
+  }
+
+  private removeRuntimeDevice(deviceId: string): boolean {
     const device = this.deviceRegistry?.getDevice(deviceId)
     if (device?.scope !== 'runtime') {
       return false
@@ -64,7 +87,6 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
       return false
     }
     this.runtime.forgetClientNavigationState(deviceId)
-    this.mobileSocketWiring?.terminateDeviceConnections(deviceId)
     return true
   }
 

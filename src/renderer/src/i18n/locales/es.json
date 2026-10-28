@@ -5934,7 +5934,7 @@
           "advanced": "Avanzado",
           "alsoDeleteRemoteHint": "Elimina permanentemente los espacios de trabajo Git remotos y sus ramas. Esta acción no se puede deshacer.",
           "alsoForgetLocalHint": "Solo limpia de Orca. Los archivos, espacios de trabajo y ramas remotas permanecen intactos.",
-          "wslHostEndsTerminals": "Quita {{value0}} de Orca, cierra sus terminales abiertas y detiene el servidor de Orca en esa distro. Los archivos de la distro no se tocan."
+          "wslHostEndsTerminalsUnlessShared": "Quita {{value0}} de Orca. Salvo que otro Orca de este equipo aún lo use, también cierra sus terminales abiertas y detiene el servidor de Orca en esa distro. Los archivos de la distro no se tocan."
         },
         "HostRenameDialog": {
           "1a2b3c4d5e": "Renombrar host",
@@ -6236,6 +6236,7 @@
           "removalPending": "La eliminación no terminó"
         },
         "wslHostRemoval": {
+          "keptForOthers": "Se quitó de este Orca. El host sigue en marcha para {{value0}}.",
           "partial": "Se quitó el host, pero algo en la distro sigue en ejecución: {{value0}}",
           "pending": "Orca aún no eliminó el host: {{value0}} Vuelve a eliminarlo para reintentarlo o conéctalo para conservarlo."
         },

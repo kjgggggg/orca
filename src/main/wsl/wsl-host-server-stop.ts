@@ -13,6 +13,7 @@ import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remot
 import { decommissionRemoteOrcad } from '../managed-server/install/orcad-remote-decommission'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { readWslHostPeerDesktops, type WslHostPeerDesktops } from './wsl-host-peer-desktops'
+import { ORCAD_RELEASE_DESKTOP_METHOD } from '../../shared/orcad-peer-desktops-contract'
 
 const CENSUS_ATTEMPTS = 20
 const CENSUS_INTERVAL_MS = 250
@@ -23,6 +24,8 @@ export type WslHostTerminalLeftover = { handle: string; worktreeId: string; reas
 export type WslHostServerStopSteps = {
   /** Which other desktops share this server; throws when it can't say. */
   peerDesktops: () => Promise<WslHostPeerDesktops>
+  /** On a shared server: revoke this desktop's own device so peers stop counting it. */
+  releaseFromPeers: () => Promise<void>
   /** Closes every terminal orcad runs; returns the ones that refused instead of stopping. */
   endTerminals: () => Promise<WslHostTerminalLeftover[]>
   census: () => Promise<OrcadTerminalCensus>
@@ -61,6 +64,10 @@ export async function stopWslHostServer(steps: WslHostServerStopSteps): Promise<
     }
   }
   if (peers.kind === 'shared') {
+    // Why: a leftover recent row of ours would keep the server for a peer's own later Remove.
+    await steps.releaseFromPeers().catch((error: unknown) => {
+      console.warn('[wsl-hosts] Could not release this Orca from the shared WSL host:', error)
+    })
     await steps.closeBridge()
     return { stopped: true, keptForOtherDesktops: peers.names }
   }
@@ -135,10 +142,16 @@ const RuntimeIdSchema = z.object({ runtimeId: z.string().min(1) })
 export function wslHostRuntimeStopSteps(
   access: WslHostRuntimeAccess,
   environmentId: string
-): Pick<WslHostServerStopSteps, 'peerDesktops' | 'endTerminals' | 'census' | 'servingRuntimeId'> {
+): Pick<
+  WslHostServerStopSteps,
+  'peerDesktops' | 'releaseFromPeers' | 'endTerminals' | 'census' | 'servingRuntimeId'
+> {
   return {
     peerDesktops: () =>
       readWslHostPeerDesktops((method, params) => access.call(environmentId, method, params)),
+    releaseFromPeers: async () => {
+      await access.call(environmentId, ORCAD_RELEASE_DESKTOP_METHOD, undefined)
+    },
     endTerminals: async () => {
       const list = TerminalHandlesSchema.parse(
         await access.call(environmentId, 'terminal.list', { limit: 1000 })
