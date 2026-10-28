@@ -16,6 +16,8 @@ export type WslDriveUncConversionPhase = (typeof WSL_DRIVE_UNC_CONVERSION_PHASES
 export type WslDriveUncConversion = {
   version: 1
   migrationId: string
+  /** The profile the conversion rewrites; null in a journal written before it was recorded. */
+  profileId: string | null
   distro: string
   repoIds: string[]
   folderWorkspaceIds: string[]
@@ -97,6 +99,7 @@ function parseWslDriveUncConversion(value: unknown): WslDriveUncConversion {
   return {
     version: 1,
     migrationId: value.migrationId,
+    profileId: isText(value.profileId) ? value.profileId : null,
     distro: value.distro,
     repoIds: [...value.repoIds],
     folderWorkspaceIds: [...value.folderWorkspaceIds],

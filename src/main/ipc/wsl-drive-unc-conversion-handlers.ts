@@ -26,6 +26,7 @@ import {
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { createWslMoveDriverDeps } from './wsl-move-driver-wiring'
 import { readWorktreeLinks } from './wsl-drive-project-handlers'
+import { readWslDistroDriveMounts } from '../wsl/wsl-drive-unc-mounts'
 
 export const WSL_DRIVE_UNC_CONVERSION_CHANNELS = [
   'wslDriveUnc:convert',
@@ -45,12 +46,14 @@ export function registerWslDriveUncConversionHandlers(
       assertAvailable()
       const request = parseRequest(args)
       const userDataPath = app.getPath('userData')
+      const { activeProfileId } = getOrcaProfileListState()
       return startWslDriveUncConversion(
         {
           userDataPath,
+          profileId: activeProfileId,
+          readDriveMounts: readWslDistroDriveMounts,
           readProfileState: async () => {
             await store.flushPendingOrThrowAsync()
-            const { activeProfileId } = getOrcaProfileListState()
             return readProfileProjectTransferState(activeProfileId, getProfileUserDataPath()).state
           },
           pause: (scope) =>

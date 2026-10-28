@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultPersistedState } from '../../shared/constants'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import { getHistorySessionDirName } from '../daemon/history-paths'
@@ -11,6 +11,7 @@ import { openProfileStateDatabase } from '../persistence/profile-state/profile-s
 import { importProfileStateJson } from '../persistence/profile-state/profile-state-documents'
 import Database from '../sqlite/sync-database'
 import { hashWorktreeId } from '../terminal-history-id'
+import type * as Journal from './wsl-drive-unc-conversion-journal'
 import {
   listWslDriveUncConversions,
   writeWslDriveUncConversion,
@@ -21,6 +22,20 @@ import {
   wslDriveUncConversionStores,
   type WslDriveUncConversionStore
 } from './wsl-drive-unc-conversion-stores'
+
+const journalWrites = vi.hoisted(() => ({ failPhase: null as string | null }))
+vi.mock('./wsl-drive-unc-conversion-journal', async (original) => {
+  const actual = await original<typeof Journal>()
+  return {
+    ...actual,
+    writeWslDriveUncConversion: (userDataPath: string, record: WslDriveUncConversion) => {
+      if (record.phase === journalWrites.failPhase) {
+        throw new Error('journal disk full')
+      }
+      actual.writeWslDriveUncConversion(userDataPath, record)
+    }
+  }
+})
 
 const PROFILE = 'profile-1'
 const UNC = String.raw`\\wsl.localhost\Ubuntu\mnt\c\src\app`
@@ -35,6 +50,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  journalWrites.failPhase = null
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -102,6 +118,7 @@ function journal(overrides: Partial<WslDriveUncConversion> = {}): void {
   writeWslDriveUncConversion(root, {
     version: 1,
     migrationId: 'conv-1',
+    profileId: PROFILE,
     distro: 'Ubuntu',
     repoIds: ['repo-a'],
     folderWorkspaceIds: [],
@@ -281,6 +298,32 @@ describe('runWslDriveUncConversionsAtStartup', () => {
     expect(run(stores)[0]?.outcome).toBe('converted')
     const shell = join(root, 'terminal-history-wsl', 'Ubuntu', hashWorktreeId(NEW_ID))
     expect(existsSync(shell)).toBe(true)
+  })
+
+  it('never reports a committed profile as rolled back when the journal cannot advance', () => {
+    seedProfile(profileState())
+    seedOutside()
+    journal()
+    journalWrites.failPhase = 'profile-rewritten'
+    expect(run()).toEqual([
+      { migrationId: 'conv-1', outcome: 'resuming', store: 'journal', detail: 'journal disk full' }
+    ])
+    expect(readProfile().repos[0].path).toBe(String.raw`C:\src\app`)
+    // Still 'prepared', whose rewrite is idempotent, with the ids journaled before the commit.
+    expect(listWslDriveUncConversions(root)).toEqual([
+      expect.objectContaining({ phase: 'prepared', worktreeIds: [[OLD_ID, NEW_ID]] })
+    ])
+    journalWrites.failPhase = null
+    expect(run()[0]?.outcome).toBe('converted')
+    expect(chatRows()[0]).toEqual({ workspace_id: NEW_ID })
+  })
+
+  it("leaves another profile's conversion journaled until that profile starts", () => {
+    seedProfile(profileState())
+    journal({ profileId: 'profile-2' })
+    expect(run()).toEqual([])
+    expect(readProfile().repos[0].path).toBe(UNC)
+    expect(listWslDriveUncConversions(root)).toHaveLength(1)
   })
 
   it('finishes a conversion that crashed after the profile commit, from the journaled ids', () => {

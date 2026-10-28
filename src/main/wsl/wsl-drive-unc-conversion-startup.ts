@@ -50,7 +50,12 @@ export type WslDriveUncConversionOutcome =
 export function runWslDriveUncConversionsAtStartup(
   deps: WslDriveUncConversionStartupDeps
 ): WslDriveUncConversionOutcome[] {
-  return listWslDriveUncConversions(deps.userDataPath).map((record) => runOne(deps, record))
+  return (
+    listWslDriveUncConversions(deps.userDataPath)
+      // Another profile's conversion waits, journaled, until that profile starts.
+      .filter((record) => record.profileId === null || record.profileId === deps.profileId)
+      .map((record) => runOne(deps, record))
+  )
 }
 
 function runOne(
@@ -65,6 +70,13 @@ function runOne(
     } catch (error) {
       removeWslDriveUncConversion(deps.userDataPath, migrationId)
       return { migrationId, outcome: 'rolled-back', detail: describe(error) }
+    }
+    // Past the commit, so never a rollback: if this write fails the journal stays 'prepared', and
+    // the next startup's rewrite is idempotent.
+    try {
+      record = update(deps, record, { phase: 'profile-rewritten' })
+    } catch (error) {
+      return { migrationId, outcome: 'resuming', store: 'journal', detail: describe(error) }
     }
   }
   const worktreeIds = new Map(record.worktreeIds)
@@ -90,7 +102,7 @@ function runOne(
 
 /**
  * Idempotent: a profile already rewritten (a crash after its commit) rewrites to itself, and the
- * id map was journaled before the commit, so the other stores still get it.
+ * id map was journaled before the commit, so the other stores still get it. Ends at the commit.
  */
 function rewriteProfile(
   deps: WslDriveUncConversionStartupDeps,
@@ -128,7 +140,7 @@ function rewriteProfile(
   if (changes.replacements.length > 0) {
     writeProfileProjectDomainChanges(deps.profileId, deps.profileUserDataPath, changes)
   }
-  return update(deps, current, { phase: 'profile-rewritten' })
+  return current
 }
 
 function isStateKey<T extends object>(field: string, state: T): field is Extract<keyof T, string> {

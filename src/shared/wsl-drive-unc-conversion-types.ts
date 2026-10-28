@@ -21,6 +21,7 @@ export type WslDriveUncConversionBlocker =
         | 'not-local'
         | 'duplicate-windows-project'
         | 'overlaps-refused-project'
+        | 'not-windows-drive-mount'
     }
   | { kind: 'windows-git-missing' }
   /** WSL Git made these worktrees; their links are Linux paths Windows Git can't follow. */

@@ -26,12 +26,17 @@ import {
 import { WslDriveUncKeyCollisionError } from './wsl-drive-unc-identity-rewrite'
 import { collectWslDriveUncScope, wslUncDrivePathToWindows } from './wsl-drive-unc-project-scope'
 import { rewriteWslDriveUncState } from './wsl-drive-unc-state-rewrite'
+import type { WindowsDriveMount } from '../runtime/wsl-guest-drive-mountinfo'
 
 export type WslDriveUncConversionRunDeps = Pick<
   WslDriveProjectDeps,
   'runWindowsGit' | 'readWorktreeLinks'
 > & {
   userDataPath: string
+  /** The active profile, which the restart's conversion rewrites. */
+  profileId: string
+  /** The distro's Windows-drive mounts; null when unreadable, which refuses every path. */
+  readDriveMounts: (distro: string) => Promise<readonly WindowsDriveMount[] | null>
   /** The saved profile, flushed first: the dry run must see what the restart will rewrite. */
   readProfileState: () => Promise<PersistedState>
   pause: (scope: WslMoveTerminalScope) => Promise<{ panes: readonly unknown[] } | WslMoveRefusal>
@@ -48,7 +53,7 @@ export async function startWslDriveUncConversion(
     return refused([{ kind: 'conversion-pending' }])
   }
   const state = await deps.readProfileState()
-  const checked = checkScope(state, request)
+  const checked = checkScope(state, request, (await deps.readDriveMounts(request.distro)) ?? [])
   if ('blockers' in checked) {
     return refused(checked.blockers)
   }
@@ -86,6 +91,7 @@ export async function startWslDriveUncConversion(
   writeWslDriveUncConversion(deps.userDataPath, {
     version: 1,
     migrationId,
+    profileId: deps.profileId,
     distro: request.distro,
     repoIds,
     folderWorkspaceIds,
@@ -108,11 +114,12 @@ export async function startWslDriveUncConversion(
 
 function checkScope(
   state: PersistedState,
-  request: WslDriveUncConversionRequest
+  request: WslDriveUncConversionRequest,
+  mounts: readonly WindowsDriveMount[]
 ):
   | { repoIds: string[]; folderWorkspaceIds: string[] }
   | { blockers: WslDriveUncConversionBlocker[] } {
-  const scope = collectWslDriveUncScope(state, request.distro)
+  const scope = collectWslDriveUncScope(state, request.distro, mounts)
   const blockers: WslDriveUncConversionBlocker[] = []
   const pick = (ids: readonly string[], allowed: readonly string[]): string[] =>
     ids.filter((id) => {

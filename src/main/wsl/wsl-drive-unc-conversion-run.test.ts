@@ -47,6 +47,8 @@ function state(): PersistedState {
 function deps(overrides: Partial<WslDriveUncConversionRunDeps> = {}): WslDriveUncConversionRunDeps {
   return {
     userDataPath: root,
+    profileId: 'profile-1',
+    readDriveMounts: async () => [{ mountPoint: '/mnt/c', windowsRoot: 'C:\\' }],
     readProfileState: async () => state(),
     pause: vi.fn(async () => ({ panes: [] })),
     runWindowsGit: vi.fn(async (args: string[]) =>
@@ -79,12 +81,24 @@ describe('startWslDriveUncConversion', () => {
     expect(listWslDriveUncConversions(root)).toEqual([
       expect.objectContaining({
         phase: 'prepared',
+        profileId: 'profile-1',
         repoIds: ['repo-a'],
         rootPaths: [UNC],
         worktreeIds: [[`repo-a::${UNC}`, `repo-a::${DRIVE}`]]
       })
     ])
     expect(run.restart).toHaveBeenCalledOnce()
+  })
+
+  it('refuses, pausing nothing, when the distro does not show /mnt/c as drive C:', async () => {
+    for (const mounts of [null, [{ mountPoint: '/mnt/c', windowsRoot: null }]]) {
+      const run = deps({ readDriveMounts: async () => mounts })
+      expect(await startWslDriveUncConversion(run, REQUEST)).toMatchObject({
+        blockers: [{ kind: 'not-convertible', id: 'repo-a', reason: 'not-windows-drive-mount' }]
+      })
+      expect(run.pause).not.toHaveBeenCalled()
+    }
+    expect(listWslDriveUncConversions(root)).toEqual([])
   })
 
   it('converts without Windows touching the UNC path, which WSL refuses for drive folders', async () => {
