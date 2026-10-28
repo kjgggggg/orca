@@ -23,15 +23,10 @@ import { recordCrashBreadcrumb } from '../../crash-reporting/crash-breadcrumb-st
 import { buildReadDirErrorBreadcrumb, type ReadDirThrowSite } from '../readdir-error-diagnostics'
 import type { FilesystemHandlerContext } from './filesystem-handler-context'
 import { registerFilesystemChunkReadHandler } from './filesystem-chunk-read-handler'
-import { readMediaPreview } from '../../media/media-preview-protocol'
+import { grantRemoteFilePreview, readMediaPreview } from '../../media/media-preview-protocol'
 import { windowsFsPath } from '../../wsl/wsl-unc-drive-fs-path'
 import { assertWslUncPathRunning, guardWslUncPathAccess } from '../../wsl/wsl-unc-access-gate'
-import {
-  UPDATE_REQUIRED_MESSAGE,
-  assertRemoteMediaReadSupported
-} from '../../media/media-preview-remote-reader'
-import { abortWhenRendererGone } from '../renderer-lifetime-abort'
-import type { RemoteMediaAddress } from '../../../shared/media-file-extensions'
+import { parseRemoteFilePreviewAddress } from '../../../shared/remote-file-preview-address'
 import {
   readLocalFileContent,
   readLocalLogSnapshot,
@@ -125,44 +120,13 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
     }
   )
 
-  ipcMain.handle(
-    'fs:readRuntimeMediaPreview',
-    async (event, args: RemoteMediaAddress): Promise<ReturnType<typeof readMediaPreview>> => {
-      const { environmentId, worktree, relativePath, expectedEnvironmentPairingRevision } = args
-      if (
-        typeof environmentId !== 'string' ||
-        !environmentId ||
-        typeof worktree !== 'string' ||
-        !worktree ||
-        typeof relativePath !== 'string' ||
-        !relativePath ||
-        /^([/\\]|[A-Za-z]:[/\\])/.test(relativePath) ||
-        relativePath.includes('\0') ||
-        (expectedEnvironmentPairingRevision !== undefined &&
-          !Number.isSafeInteger(expectedEnvironmentPairingRevision))
-      ) {
-        throw new Error('Invalid media path')
-      }
-      const remote: RemoteMediaAddress = {
-        environmentId,
-        worktree,
-        relativePath,
-        expectedEnvironmentPairingRevision
-      }
-      const lifetime = abortWhenRendererGone(event.sender)
-      try {
-        await assertRemoteMediaReadSupported(remote, lifetime.signal)
-      } catch (error) {
-        // Only the update verdict is final; losing contact is reported by the stream.
-        if (error instanceof Error && error.message === UPDATE_REQUIRED_MESSAGE) {
-          throw error
-        }
-      } finally {
-        lifetime.dispose()
-      }
-      return readMediaPreview(event, { remote }, store)
+  ipcMain.handle('fs:grantRuntimeFilePreview', (event, args: unknown) => {
+    const remote = parseRemoteFilePreviewAddress(args)
+    if (!remote) {
+      throw new Error('Invalid preview path')
     }
-  )
+    return grantRemoteFilePreview(event, remote, store)
+  })
 
   ipcMain.handle(
     'fs:listMarkdownDocuments',

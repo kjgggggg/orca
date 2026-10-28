@@ -13,18 +13,4 @@ export const MEDIA_FILE_MIME_TYPES: Record<string, string> = {
   '.webm': 'video/webm'
 }
 
-export function mediaFileMimeType(filePath: string): string | undefined {
-  const name = filePath.slice(Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1)
-  const dot = name.lastIndexOf('.')
-  return dot <= 0 ? undefined : MEDIA_FILE_MIME_TYPES[name.slice(dot).toLowerCase()]
-}
-
 export const MEDIA_PREVIEW_SCHEME = 'orca-media'
-
-export type RemoteMediaAddress = {
-  environmentId: string
-  /** Runtime worktree selector, e.g. 'id:wt-1'. */
-  worktree: string
-  relativePath: string
-  expectedEnvironmentPairingRevision?: number
-}

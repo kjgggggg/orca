@@ -46,8 +46,8 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
         relativePath: file.relativePath
       })
     },
-    // The web client has no orca-media protocol, so it falls back to chunked reads.
-    readRuntimeMediaPreview: async () => null,
+    // No orca-media protocol in a browser; audio and video keep the binary placeholder.
+    grantRuntimeFilePreview: async () => null,
     readFile: async ({ filePath }) => {
       const file = await resolveRuntimeFilePath(filePath)
       return callRuntimeResult('files.readPreview', {

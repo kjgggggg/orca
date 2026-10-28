@@ -1,4 +1,4 @@
-import type { RemoteMediaAddress } from '../../shared/media-file-extensions'
+import type { RemoteFilePreviewAddress } from '../../shared/remote-file-preview-address'
 import type { RuntimeFileReadChunkResult } from '../../shared/runtime-file-contracts'
 import { callRuntimeEnvironment } from '../ipc/runtime-environments/runtime-environment-transport-routing'
 import { getCanonicalUserDataPath } from '../persistence'
@@ -6,15 +6,20 @@ import { getCanonicalUserDataPath } from '../persistence'
 const STAT_TIMEOUT_MS = 15_000
 const READ_CHUNK_TIMEOUT_MS = 60_000
 
-export const UPDATE_REQUIRED_MESSAGE =
-  'Playing remote media requires a newer Orca on the paired machine. Update it and try again.'
+export const REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE =
+  'Previewing this file requires a newer Orca on the paired machine. Update it and try again.'
+
+/** The pairing that minted a grant is gone; the grant can never answer again. */
+export class RemotePreviewPairingChangedError extends Error {}
+
+export type RemotePreviewFileSnapshot = { size: number; mtime: number; ctime?: number }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
 async function callRemote(
-  address: RemoteMediaAddress,
+  address: RemoteFilePreviewAddress,
   method: 'files.stat' | 'files.readChunk',
   params: Record<string, unknown>,
   timeoutMs: number,
@@ -31,18 +36,23 @@ async function callRemote(
     { signal }
   )
   if (!response.ok) {
-    // Old hosts lack range reads; report the required update instead of method_not_found.
+    if (response.error.code === 'runtime_environment_changed') {
+      throw new RemotePreviewPairingChangedError(response.error.message)
+    }
+    // Why: a host without files.stat/readChunk can only be updated, never retried.
     throw new Error(
-      response.error.code === 'method_not_found' ? UPDATE_REQUIRED_MESSAGE : response.error.message
+      response.error.code === 'method_not_found'
+        ? REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE
+        : response.error.message
     )
   }
   return response.result
 }
 
-export async function statRemoteMedia(
-  address: RemoteMediaAddress,
+export async function statRemotePreviewFile(
+  address: RemoteFilePreviewAddress,
   signal: AbortSignal
-): Promise<{ size: number }> {
+): Promise<RemotePreviewFileSnapshot> {
   const result = await callRemote(
     address,
     'files.stat',
@@ -53,16 +63,21 @@ export async function statRemoteMedia(
   if (
     !isRecord(result) ||
     typeof result.size !== 'number' ||
-    !Number.isFinite(result.size) ||
+    !Number.isSafeInteger(result.size) ||
     result.size < 0 ||
-    typeof result.isDirectory !== 'boolean'
+    typeof result.isDirectory !== 'boolean' ||
+    typeof result.mtime !== 'number'
   ) {
     throw new Error('The paired machine returned an unreadable file description.')
   }
   if (result.isDirectory) {
-    throw new Error('This path is a directory, not a media file.')
+    throw new Error('This path is a directory, not a file.')
   }
-  return { size: result.size }
+  return {
+    size: result.size,
+    mtime: result.mtime,
+    ...(typeof result.ctime === 'number' ? { ctime: result.ctime } : {})
+  }
 }
 
 function isReadChunkResult(value: unknown): value is RuntimeFileReadChunkResult {
@@ -74,8 +89,8 @@ function isReadChunkResult(value: unknown): value is RuntimeFileReadChunkResult 
   )
 }
 
-export async function readRemoteMediaChunk(
-  address: RemoteMediaAddress,
+export async function readRemotePreviewChunk(
+  address: RemoteFilePreviewAddress,
   offset: number,
   length: number,
   signal: AbortSignal
@@ -88,33 +103,11 @@ export async function readRemoteMediaChunk(
     signal
   )
   if (!isReadChunkResult(result)) {
-    throw new Error('The paired machine returned an unreadable media chunk.')
+    throw new Error('The paired machine returned an unreadable file chunk.')
   }
   const bytes = new Uint8Array(Buffer.from(result.contentBase64, 'base64'))
-  if (bytes.length !== result.bytesRead) {
-    throw new Error('The paired machine returned a corrupted media chunk.')
+  if (bytes.length !== result.bytesRead || bytes.length > length) {
+    throw new Error('The paired machine returned a corrupted file chunk.')
   }
   return bytes
-}
-
-const MAX_SUPPORTED_VERDICTS = 64
-const supportedVerdicts = new Map<string, true>()
-
-// Older hosts lack files.readChunk; probing at mint time surfaces the update message before playback.
-export async function assertRemoteMediaReadSupported(
-  address: RemoteMediaAddress,
-  signal: AbortSignal
-): Promise<void> {
-  const key = JSON.stringify([address.environmentId, address.expectedEnvironmentPairingRevision])
-  if (supportedVerdicts.has(key)) {
-    return
-  }
-  await readRemoteMediaChunk(address, 0, 1, signal)
-  if (supportedVerdicts.size >= MAX_SUPPORTED_VERDICTS) {
-    const oldest = supportedVerdicts.keys().next().value
-    if (oldest !== undefined) {
-      supportedVerdicts.delete(oldest)
-    }
-  }
-  supportedVerdicts.set(key, true)
 }

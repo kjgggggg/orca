@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadRuntimeFile } from './runtime-file-read-client'
+import { downloadRuntimeFile } from './runtime-file-download-client'
 import {
   fsSaveDownloadedFile,
   fsStartDownloadedFile,

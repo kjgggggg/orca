@@ -7,11 +7,11 @@ vi.mock('../ipc/runtime-environments/runtime-environment-transport-routing', () 
 vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => '/user-data' }))
 
 import {
-  UPDATE_REQUIRED_MESSAGE,
-  assertRemoteMediaReadSupported,
-  readRemoteMediaChunk,
-  statRemoteMedia
-} from './media-preview-remote-reader'
+  REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE,
+  RemotePreviewPairingChangedError,
+  readRemotePreviewChunk,
+  statRemotePreviewFile
+} from './remote-file-preview-reader'
 
 const address = {
   environmentId: 'env-1',
@@ -22,13 +22,19 @@ const address = {
 const ok = (result: unknown) => ({ ok: true, result })
 const fail = (code: string, message: string) => ({ ok: false, error: { code, message } })
 
-describe('remote media reader', () => {
+describe('remote file preview reader', () => {
   const signal = new AbortController().signal
   beforeEach(() => callRuntimeEnvironment.mockReset())
 
-  it('stat passes worktree, path, 15s timeout, pairing revision and signal', async () => {
-    callRuntimeEnvironment.mockResolvedValue(ok({ size: 6, isDirectory: false, mtime: 1 }))
-    await expect(statRemoteMedia(address, signal)).resolves.toEqual({ size: 6 })
+  it('stats the file through its pinned pairing', async () => {
+    callRuntimeEnvironment.mockResolvedValue(
+      ok({ size: 6, isDirectory: false, mtime: 1, ctime: 2 })
+    )
+    await expect(statRemotePreviewFile(address, signal)).resolves.toEqual({
+      size: 6,
+      mtime: 1,
+      ctime: 2
+    })
     expect(callRuntimeEnvironment).toHaveBeenCalledWith(
       '/user-data',
       'env-1',
@@ -41,105 +47,35 @@ describe('remote media reader', () => {
     )
   })
 
-  it('stat rejects a directory', async () => {
+  it('refuses a directory', async () => {
     callRuntimeEnvironment.mockResolvedValue(ok({ size: 0, isDirectory: true, mtime: 1 }))
-    await expect(statRemoteMedia(address, signal)).rejects.toThrow()
+    await expect(statRemotePreviewFile(address, signal)).rejects.toThrow('directory')
   })
 
-  it('stat rejects a malformed result', async () => {
-    callRuntimeEnvironment.mockResolvedValue(ok({ nope: true }))
-    await expect(statRemoteMedia(address, signal)).rejects.toThrow()
-  })
-
-  it('readChunk decodes base64', async () => {
-    callRuntimeEnvironment.mockResolvedValue(
+  it('decodes a chunk and refuses one whose length disagrees', async () => {
+    callRuntimeEnvironment.mockResolvedValueOnce(
       ok({ contentBase64: 'AAECAw==', bytesRead: 4, eof: false })
     )
-    await expect(readRemoteMediaChunk(address, 10, 4, signal)).resolves.toEqual(
+    await expect(readRemotePreviewChunk(address, 10, 4, signal)).resolves.toEqual(
       new Uint8Array([0, 1, 2, 3])
     )
-    expect(callRuntimeEnvironment).toHaveBeenCalledWith(
-      '/user-data',
-      'env-1',
-      'files.readChunk',
-      { worktree: 'id:wt-1', relativePath: 'out/clip.mp4', offset: 10, length: 4 },
-      60_000,
-      7,
-      undefined,
-      { signal }
-    )
-  })
-
-  it('readChunk rejects when bytesRead disagrees with the decoded length', async () => {
-    callRuntimeEnvironment.mockResolvedValue(
+    callRuntimeEnvironment.mockResolvedValueOnce(
       ok({ contentBase64: 'AAE=', bytesRead: 4, eof: false })
     )
-    await expect(readRemoteMediaChunk(address, 0, 4, signal)).rejects.toThrow()
+    await expect(readRemotePreviewChunk(address, 0, 4, signal)).rejects.toThrow('corrupted')
   })
 
-  it('maps method_not_found to the update-required message', async () => {
+  it('tells the user to update a host without range reads', async () => {
     callRuntimeEnvironment.mockResolvedValue(fail('method_not_found', 'x'))
-    await expect(statRemoteMedia(address, signal)).rejects.toThrow(
-      'Playing remote media requires a newer Orca on the paired machine. Update it and try again.'
+    await expect(statRemotePreviewFile(address, signal)).rejects.toThrow(
+      REMOTE_PREVIEW_UPDATE_REQUIRED_MESSAGE
     )
   })
 
-  it('passes other server errors through', async () => {
-    callRuntimeEnvironment.mockResolvedValue(fail('remote_runtime_unavailable', 'gone'))
-    await expect(readRemoteMediaChunk(address, 0, 1, signal)).rejects.toThrow('gone')
-  })
-
-  describe('assertRemoteMediaReadSupported', () => {
-    const chunk = ok({ contentBase64: 'AA==', bytesRead: 1, eof: false })
-    const probeAddress = (revision: number) => ({
-      ...address,
-      environmentId: `probe-env-${revision}`,
-      expectedEnvironmentPairingRevision: revision
-    })
-
-    it('probes one byte at offset 0', async () => {
-      callRuntimeEnvironment.mockResolvedValue(chunk)
-      await assertRemoteMediaReadSupported(probeAddress(1), signal)
-      expect(callRuntimeEnvironment).toHaveBeenCalledWith(
-        '/user-data',
-        'probe-env-1',
-        'files.readChunk',
-        { worktree: 'id:wt-1', relativePath: 'out/clip.mp4', offset: 0, length: 1 },
-        60_000,
-        1,
-        undefined,
-        { signal }
-      )
-    })
-
-    it('caches a supported verdict per environment and revision', async () => {
-      callRuntimeEnvironment.mockResolvedValue(chunk)
-      await assertRemoteMediaReadSupported(probeAddress(2), signal)
-      await assertRemoteMediaReadSupported(probeAddress(2), signal)
-      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(1)
-      await assertRemoteMediaReadSupported(probeAddress(3), signal)
-      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
-    })
-
-    it('rejects with the update message and does not cache it', async () => {
-      callRuntimeEnvironment.mockResolvedValue(fail('method_not_found', 'nope'))
-      await expect(assertRemoteMediaReadSupported(probeAddress(4), signal)).rejects.toThrow(
-        UPDATE_REQUIRED_MESSAGE
-      )
-      await expect(assertRemoteMediaReadSupported(probeAddress(4), signal)).rejects.toThrow(
-        UPDATE_REQUIRED_MESSAGE
-      )
-      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
-    })
-
-    it('does not cache other probe errors', async () => {
-      callRuntimeEnvironment.mockResolvedValue(fail('runtime_error', 'offline'))
-      await expect(assertRemoteMediaReadSupported(probeAddress(5), signal)).rejects.toThrow(
-        'offline'
-      )
-      callRuntimeEnvironment.mockResolvedValue(chunk)
-      await assertRemoteMediaReadSupported(probeAddress(5), signal)
-      expect(callRuntimeEnvironment).toHaveBeenCalledTimes(2)
-    })
+  it('reports a re-paired environment as a dead pairing, not a transient failure', async () => {
+    callRuntimeEnvironment.mockResolvedValue(fail('runtime_environment_changed', 'changed'))
+    await expect(readRemotePreviewChunk(address, 0, 1, signal)).rejects.toBeInstanceOf(
+      RemotePreviewPairingChangedError
+    )
   })
 })

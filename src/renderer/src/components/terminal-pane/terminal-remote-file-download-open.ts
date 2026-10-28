@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { basename } from '@/lib/path'
-import { downloadRuntimeFile } from '@/runtime/runtime-file-read-client'
+import { downloadRuntimeFile } from '@/runtime/runtime-file-download-client'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 
 /**
